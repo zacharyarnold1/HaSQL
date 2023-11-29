@@ -10,5 +10,10 @@ data Database =
 
 data Table = Table {
     tableName :: String,
-    columns :: [ColumnObj]
+    column :: ColumnObj,
+    entries :: [Record]
+}
+
+data Record = Record {
+    
 }
