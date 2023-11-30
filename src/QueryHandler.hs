@@ -2,6 +2,8 @@ module QueryHandler where
 
 import CommandLine
 
+import Database
+
 classifier :: SQLObj -> ()
 classifier (SELECT _ _ _) = undefined -- send this to select function
 classifier (CREATE _ _ ) = undefined -- send to create

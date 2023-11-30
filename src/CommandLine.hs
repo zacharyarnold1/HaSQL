@@ -1,7 +1,7 @@
 module CommandLine where
 
+import Control.Applicative (Alternative (..))
 import Parser
-import Control.Applicative (Alternative(..))
 
 data SQLObj
   = SELECT
@@ -41,29 +41,46 @@ data Clause
   = Clause Value Value (Value -> Value -> Bool)
   | OR Clause Clause
   | AND Clause Clause
+  | NOT Clause
   | NONE
 
+reserved :: Char -> Bool
+reserved c = c `elem` ['[', ']']
+
+text :: Parser String
+text = some (satisfy (not . reserved))
 
 parseInput :: Parser SQLObj
 parseInput = parseSelect <|> parseCreate <|> parseInsert <|> parseUpdate <|> parseDelete
 
 parseSelect :: Parser SQLObj
-parseSelect = undefined
+parseSelect = SELECT <$> parseColumn <*> text <*> parseClause
 
 parseCreate :: Parser SQLObj
-parseCreate = undefined
+parseCreate = CREATE <$> text <*> parseEntry
 
 parseInsert :: Parser SQLObj
-parseInsert = undefined
+parseInsert = INSERT <$> text <*> parseEntry
 
 parseUpdate :: Parser SQLObj
-parseUpdate = undefined
+parseUpdate = UPDATE <$> text <*> parseEntry <*> parseClause
 
 parseDelete :: Parser SQLObj
-parseDelete = undefined
+parseDelete = DELETE <$> text <*> parseClause
 
-parseClause :: Parser Clause 
+parseClause :: Parser Clause
 parseClause = undefined
+
+parseColumn :: Parser ColumnObj
+parseColumn = undefined
+
+parseEntry :: Parser [(String, Value)]
+parseEntry = undefined
 
 cli :: IO ()
 cli = undefined
+
+data Stepper = Stepper {
+  tableName :: Maybe String
+  data
+}
