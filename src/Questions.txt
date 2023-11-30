@@ -1,0 +1,4 @@
+1. How should we approach storing databases that users create?
+2. For functions that don't require modifying the database, should we still use the state monad (or something like it)
+3. How do we combine state and io monads w/ monad transformers?
+4. 
