@@ -40,7 +40,7 @@ library
   import:
       common-stanza
   exposed-modules:
-      Lib
+      HaSqlCLI, HaSqlDB, HaSqlFiles, HaSqlParser, HaSqlSyntax
   hs-source-dirs:
       src
 
