@@ -3,6 +3,7 @@ module HaSqlParser where
 import Control.Applicative (Alternative (..))
 import HaSqlSyntax
 import Parser
+import Test.HUnit (Test)
 
 reserved :: Char -> Bool
 reserved c = c `elem` ['[', ']']
@@ -17,13 +18,13 @@ parseSelect :: Parser SQLObj
 parseSelect = SELECT <$> parseColumn <*> text <*> parseClause
 
 parseCreate :: Parser SQLObj
-parseCreate = CREATE <$> text <*> parseEntry
+parseCreate = CREATE <$> text <*> parseRecord
 
 parseInsert :: Parser SQLObj
-parseInsert = INSERT <$> text <*> parseEntry
+parseInsert = INSERT <$> text <*> parseRecord
 
 parseUpdate :: Parser SQLObj
-parseUpdate = UPDATE <$> text <*> parseEntry <*> parseClause
+parseUpdate = UPDATE <$> text <*> parseRecord <*> parseClause
 
 parseDelete :: Parser SQLObj
 parseDelete = DELETE <$> text <*> parseClause
@@ -34,5 +35,12 @@ parseClause = undefined
 parseColumn :: Parser ColumnObj
 parseColumn = undefined
 
-parseEntry :: Parser [(String, Value)]
-parseEntry = undefined
+parseRecord :: Parser [(String, Value)]
+parseRecord = char '(' *> text <* char ')'
+
+test_parseRecord :: Test
+test_parseRecord = TestList [
+    parse parseEntry "({name, 'Kailash'}, {}, {})"
+]
+
+

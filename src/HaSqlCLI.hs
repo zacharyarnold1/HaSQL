@@ -31,13 +31,6 @@ cli = go initialStepper
         Just ("[LOAD]", _) -> undefined
         _ -> case db ss of
           Nothing -> putStr "no database selected"
-          Just database ->
-            case doParse parseInput str of
-              Just (SELECT s f w, _) -> select s f w
-              Just (CREATE n cs, _) -> create n cs
-              Just (INSERT n cs, _) -> insert n cs
-              Just (UPDATE n s w, _) -> update n s w
-              Just (DELETE n w, _) -> delete n w
-              _ -> undefined
+          Just database -> eval (doParse parseInput str)
     prompt :: Stepper -> IO ()
     prompt = undefined

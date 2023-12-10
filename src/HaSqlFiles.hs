@@ -1,23 +1,69 @@
 module HaSqlFiles where
 
 import Control.Applicative (Alternative (..))
-import HaSqlDB
-import HaSqlSyntax
+import Data.List (isPrefixOf, stripPrefix)
+import Data.Map (fromList)
+import Data.Maybe (catMaybes)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>))
+import System.IO (readFile, writeFile)
 
-saveDatabase :: Database -> String -> ()
-saveDatabase db s = undefined
+serializeDatabase :: Database -> String
+serializeDatabase (Database dbMap) =
+  Data.Map.foldrWithKey (\name table acc -> acc ++ serializeTable name table) "" dbMap
 
-loadDatabase :: String -> Database
-loadDatabase = undefined
+serializeTable :: Name -> Table -> String
+serializeTable name (Table cols records) =
+  "Table: " ++ name ++ "\nColumns: " ++ show cols ++ "\nRecords:\n" ++ unlines (map show (Data.Map.elems records))
 
-formatDatabase :: Database -> String
-formatDatabase = undefined
+saveDatabase :: Database -> String -> IO ()
+saveDatabase db dbName = do
+  let dir = "HaSQL/databases"
+  createDirectoryIfMissing True dir
+  let filePath = dir </> (dbName ++ ".txt")
+  writeFile filePath (serializeDatabase db)
 
-parseDatabase :: parser Database
-parseDatabase = undefined
+parseDatabase :: String -> Database
+parseDatabase str =
+  let tables = parseTables str
+   in Database $ Data.Map.fromList tables
 
-parseTable :: parser Table
-parseTable = undefined
+loadDatabase :: String -> IO Database
+loadDatabase dbName = do
+  let filePath = "HaSQL/databases" </> (dbName ++ ".txt")
+  contents <- readFile filePath
+  return $ parseDatabase contents
 
-parseRecord :: parser Record
-parseRecord = undefined
+parseTables :: String -> [(Name, Table)]
+parseTables str =
+  let tableStrs = splitOn "\n\n" str -- Assuming each table is separated by two newlines
+   in catMaybes $ map parseTable tableStrs
+
+parseTable :: String -> Maybe (Name, Table)
+parseTable str = do
+  let lines = filter (not . null) $ splitOn "\n" str
+  name <- parseTableName $ head lines
+  let cols = parseColumns $ lines !! 1
+  let records = map parseRecord $ drop 2 lines
+  return (name, Table cols records)
+
+parseTableName :: String -> Maybe Name
+parseTableName str =
+  stripPrefix "Table: " str
+
+parseColumns :: String -> [Column]
+parseColumns str =
+  case stripPrefix "Columns: " str of
+    Just colsStr -> read colsStr
+    Nothing -> []
+
+parseRecord :: String -> Record
+parseRecord str =
+  fromList $ read str
+
+splitOn :: String -> String -> [String]
+splitOn delimiter = foldr f [[]]
+  where
+    f c l@(x : xs)
+      | c `elem` delimiter = [] : l
+      | otherwise = (c : x) : xs
