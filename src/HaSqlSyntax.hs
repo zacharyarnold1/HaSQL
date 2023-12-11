@@ -47,7 +47,7 @@ instance Eq Value where
   (==) NilVal NilVal = True
   (==) (IntVal i) (IntVal i2) = i == i2
   (==) (StringVal s) (StringVal s2) = s == s2
-  (==) (ColVal c) (StringVal c2) = c == c2
+  (==) (ColVal c) (ColVal c2) = c == c2
   (==) _ _ = False
 
 data ColumnObj

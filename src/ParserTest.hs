@@ -21,7 +21,7 @@ testParseSelectStar = TestCase $ do
 testParseSelectComplexClause :: Test
 testParseSelectComplexClause = TestCase $ do
   let input = "[GET] (colA, colB) [IN] (myTable) [IF] ({{colA == 'value1'} AND {NOT {colB == 'value2'}}})"
-  let expected = Right SELECT {selectColumns = Columns ["colA", "colB"], fromTable = "myTable", whereClauses = AND (Clause (ColVal "col1") (StringVal "value1") EQS) (NOT (Clause (ColVal "colB") (StringVal "value2") EQS))}
+  let expected = Right SELECT {selectColumns = Columns ["colA", "colB"], fromTable = "myTable", whereClauses = AND (Clause (ColVal "colA") (StringVal "value1") EQS) (NOT (Clause (ColVal "colB") (StringVal "value2") EQS))}
   assertEqual "parse select statement" expected (parseDSL input)
 
 -- Test for parseCreate
@@ -57,6 +57,8 @@ tests :: Test
 tests =
   TestList
     [ TestLabel "Select Test" testParseSelect,
+      TestLabel "Select Test w/ Star" testParseSelectStar,
+      TestLabel "Select Test w/ Complex Clause" testParseSelectComplexClause,
       TestLabel "Create Test" testParseCreate,
       TestLabel "Insert Test" testParseInsert,
       TestLabel "Update Test" testParseUpdate,
