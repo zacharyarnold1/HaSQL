@@ -4,6 +4,7 @@ import Control.Applicative (Alternative (..))
 import Data.List (isPrefixOf, stripPrefix)
 import Data.Map (fromList)
 import Data.Maybe (catMaybes)
+import HaSqlDB
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO (readFile, writeFile)
@@ -37,7 +38,7 @@ loadDatabase dbName = do
 parseTables :: String -> [(Name, Table)]
 parseTables str =
   let tableStrs = splitOn "\n\n" str -- Assuming each table is separated by two newlines
-   in catMaybes $ map parseTable tableStrs
+   in mapMaybe parseTable tableStrs
 
 parseTable :: String -> Maybe (Name, Table)
 parseTable str = do
@@ -48,14 +49,11 @@ parseTable str = do
   return (name, Table cols records)
 
 parseTableName :: String -> Maybe Name
-parseTableName str =
-  stripPrefix "Table: " str
+parseTableName = stripPrefix "Table: "
 
 parseColumns :: String -> [Column]
 parseColumns str =
-  case stripPrefix "Columns: " str of
-    Just colsStr -> read colsStr
-    Nothing -> []
+  maybe [] read (stripPrefix "Columns: " str)
 
 parseRecord :: String -> Record
 parseRecord str =

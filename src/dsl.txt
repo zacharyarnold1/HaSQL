@@ -18,7 +18,7 @@ Querying a table (GET statement):
         Example:
         Consider a table called 'Employees' with columns 'name', 'age', 'hometown', 'division', 'seniority', and 'boss'. 
         If I want the 'name', 'age', 'hometown', 'division', 'seniority', and 'boss' of all employees who's hometown is Philadelphia, I could write the following query:
-        [GET] * [IN] (Employees) [IF] (hometown == 'Philadelphia')
+        [GET] * [IN] (Employees) [IF] ({hometown == 'Philadelphia'})
     
 Creating a table (MAKE statement):
     [MAKE] (name of table, must contain only characters A-Z and '_') (list of column name  + datatype tuples, in the order they should appear in the table, names must contain only letters A-Z and '_')
@@ -64,13 +64,26 @@ Updating data in an existing table (CHANGE statement):
 
     [CHANGE] (Students) [TO] ({behavior, 'terrible'}) [IF] ({grade == 7})
 
+Deleting records in an existing table (REMOVEFROM statement):
+    [REMOVEFROM] (table name)
+    [IF] (boolean statement where if true, that record is returned, and if false, that record is not returned)
+
+    Important restrictions: 
+        - this command deletes entire records that fit the [IF] clause
+    
+    Example:
+    I have a table called 'Students' with columns name (string), age (int), grade (int), behavior (string).
+    All students with terrible behavior were expelled from the school...
+
+    [REMOVEFROM] (Students) [IF] ({behavior == 'terrible'})
+
 Where clauses:
     All [IF] blocks should be followed by a where clause. All where clauses should be enclosed in brackets.
     Where clauses can be logical conjuctions of other where clauses. The availble conjuctors are 'AND', 'OR', and 'NOT'
 
     Example:
-    I want records only if age is greater than 20 and name is Kailash:
-    .... [IF] ({{age > 20} AND {name == 'Kailash'}})
+    I want records only if age is greater than 20 and name is Kailash.... 
+    [IF] ({{age > 20} AND {name == 'Kailash'}})
 
-    I want records only if age is greater than 20 and there name is either Zach and Kailash:
-    .... [IF] ({{age > 20} AND {{name == 'Kailash'} OR {name == 'Zach'}}})
+    I want records only if age is greater than 20 and there name is either Zach and Kailash.... 
+    [IF] ({{age > 20} AND {{name == 'Kailash'} OR {name == 'Zach'}}})

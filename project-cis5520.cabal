@@ -31,16 +31,20 @@ common common-stanza
     , directory
     , random
     , mtl
+    , parsec >= 3.1
   default-language:
     GHC2021
   default-extensions:
-
 
 library
   import:
       common-stanza
   exposed-modules:
-      HaSqlCLI, HaSqlDB, HaSqlFiles, HaSqlParser, HaSqlSyntax
+      HaSqlCLI
+      , HaSqlDB
+      , HaSqlFiles
+      , HaSqlParser
+      , HaSqlSyntax
   hs-source-dirs:
       src
 

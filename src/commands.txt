@@ -1,0 +1,37 @@
+s[MAKE] (users) [WITH] ({name, string}, {age, int}, {id, int})
+[MAKE] (employees) [WITH] ({name, string}, {boss, string}, {division, string}, {salary, int})
+
+[PUT] (users) [WITH] ({name, 'Kailash'}, {age, 21}, {id, 1})
+[PUT] (users) [WITH] ({name, 'Zach'}, {age, 23}, {id, 2})
+[PUT] (users) [WITH] ({name, 'Cassia'}, {age, 22}, {id, 3})
+[PUT] (users) [WITH] ({name, 'Irene'}, {id, 4})
+[PUT] (users) [WITH] ({name, 'Professor Weirich'}, {age, 27}, {id, 5})
+[PUT] (users) [WITH] ({name, 'Shyam'}, {age, 25}, {id, 6})
+[PUT] (users) [WITH] ({name, 'Amanda'}, {age, 21}, {id, 7})
+[PUT] (users) [WITH] ({name, 'Chip'}, {age, 60}, {id, 8})
+
+[GET] (*) [IN] (users)
+
+[PUT] (employees) [WITH] ({name, 'Kailash'}, {boss, 'Bossman'}, {division, 'SWE'}, {salary, 100000})
+[PUT] (employees) [WITH] ({name, 'Zach'}, {boss, 'Bossman'}, {division, 'Swagonometry'})
+[PUT] (employees) [WITH] ({name, 'Shyam'}, {boss, 'Bosswoman'}, {division, 'HWE'}, {salary, 150000})
+[PUT] (employees) [WITH] ({name, 'Amanda'}, {boss, 'Bosswoman'}, {division, 'Biology'}, {salary, 130000})
+[PUT] (employees) [WITH] ({name, 'Eli'}, {division, 'Finance'}, {salary, 100000})
+[PUT] (employees) [WITH] ({name, 'Professor Weirich'}, {salary, 5000000000})
+
+[GET] (*) [IN] (employees)
+
+[GET] (name, id) [IN] (users) [IF] ({{name == 'Kailash'} OR {age > 23}})
+[GET] (name, age) [IN] (users) [IF] ({{name == 'Zach'} OR {id <= 5}})
+
+[REMOVEFROM] (users) [IF] ({{age < 22} OR {name == 'Chip'}})
+
+[GET] (*) [IN] (users)
+
+[CHANGE] (employees) [TO] ({salary, 200000}) [IF] ({{name == 'Kailash} OR {name == 'Zach'}})
+[CHANGE] (employees) [TO] ({boss, 'bossman'}) [IF] ({{name == 'Eli} AND {division == 'Finance'}})
+[CHANGE] (users) [TO] ({age, 22}) [IF] ({name == 'Irene'})
+
+[GET] (*) [IN] (employees)
+[GET] (*) [IN] (users)
+

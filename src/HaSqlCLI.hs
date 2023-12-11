@@ -1,36 +1,30 @@
 module HaSqlCLI where
 
-import Data.List qualified as List
-import Data.Maybe
+import Control.Monad.State
+import Data.Map (Map)
+import Data.Map qualified as Map
 import HaSqlDB
-import HaSqlFiles
 import HaSqlParser
 import HaSqlSyntax
-import Parser
+import System.IO (isEOF)
 
-data Stepper = Stepper
-  { db :: Maybe Database,
-    history :: Maybe Stepper,
-    dbName :: Maybe String
-  }
+-- Mock database for demonstration purposes
+initialDatabase :: Database
+initialDatabase = Map.empty
 
-initialStepper :: Stepper
-initialStepper = undefined
+-- Main function for the CLI
+main :: IO ()
+main = cliLoop initialDatabase
 
-cli :: IO ()
-cli = go initialStepper
-  where
-    go :: Stepper -> IO ()
-    go ss = do
-      prompt ss
-      putStr (fromMaybe "HaSQL" (dbName ss) ++ "> ")
-      str <- getLine
-      case List.uncons (words str) of
-        Just ("[SAVE]", _) -> undefined
-        Just ("[QUIT]", _) -> return ()
-        Just ("[LOAD]", _) -> undefined
-        _ -> case db ss of
-          Nothing -> putStr "no database selected"
-          Just database -> eval (doParse parseInput str)
-    prompt :: Stepper -> IO ()
-    prompt = undefined
+-- The CLI loop
+cliLoop :: Database -> IO ()
+cliLoop db = do
+  putStr "> "
+  str <- getLine
+  case parseDSL str of
+    Left err -> print err
+    Right sqlObj ->
+      let (s, a) = runState (eval sqlObj) db
+       in do
+            putStrLn s
+            cliLoop a
