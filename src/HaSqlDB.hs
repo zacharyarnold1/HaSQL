@@ -1,28 +1,29 @@
 module HaSqlDB where
 
 import Control.Monad.State
+import Data.Function (on)
+import Data.List (groupBy, sortBy)
 import Data.Map (Map)
 import Data.Map qualified
 import Data.Maybe
+import Data.Ord (Down (Down), comparing)
 import HaSqlSyntax
+import HaSqlTables
 
-type Cols = Map String ValType
+select :: ColumnObj -> TableObj -> Clause -> [String] -> ([String], Bool) -> State Database (Maybe Table)
+select cs tableObj clause groupByCols (orderByCols, d) = state $ \(DB db) ->
+  let table = evalTable tableObj db
+      filteredRecords = filter (evalClause clause) (recordsFromTable table)
+      selectedTable = selectHelper cs (Table (colsFromTable table) filteredRecords)
+      groupedTable = groupOn groupByCols selectedTable
+      orderedTable = HaSqlDB.orderBy orderByCols d groupedTable
+   in (Just orderedTable, DB db)
 
-type Name = String
+colsFromTable :: Table -> Cols
+colsFromTable (Table cols _) = cols
 
-type Database = Map Name Table
-
-data Table = Table Cols [Record]
-
-type Record = Map String Value
-
-select :: ColumnObj -> String -> Clause -> State Database (Maybe Table)
-select cs tableName clause = state $ \db ->
-  case Data.Map.lookup tableName db of
-    Just (Table cols records) ->
-      let filteredRecords = filter (evalClause clause) records
-       in (Just (selectHelper cs (Table cols filteredRecords)), db)
-    Nothing -> (Nothing, db)
+recordsFromTable :: Table -> [Record]
+recordsFromTable (Table _ records) = records
 
 selectHelper :: ColumnObj -> Table -> Table
 selectHelper Star table = table
@@ -30,54 +31,54 @@ selectHelper (Columns cols) (Table allCols records) = Table (filterHeaders cols 
   where
     filteredRecords = map (filterColumns cols) records
     filterColumns :: [String] -> Record -> Record
-    filterColumns cols = Data.Map.filterWithKey (\k _ -> k `elem` cols)
+    filterColumns cols (Rec r) = Rec $ Data.Map.filterWithKey (\k _ -> k `elem` cols) r
 
     filterHeaders :: [String] -> Cols -> Cols
-    filterHeaders hds = Data.Map.filterWithKey (\k _ -> k `elem` hds)
+    filterHeaders hds (Cols c) = Cols $ Data.Map.filterWithKey (\k _ -> k `elem` hds) c
 
 create :: String -> [(String, ValType)] -> State Database (Maybe String)
-create tableName columns = state $ \db ->
+create tableName columns = state $ \(DB db) ->
   if Data.Map.member tableName db
-    then (Nothing, db) -- return a message that this table already exists
+    then (Nothing, DB db) -- return a message that this table already exists
     else
-      let newTable = Table (Data.Map.fromList columns) []
-       in (Just tableName, Data.Map.insert tableName newTable db)
+      let newTable = Table (Cols (Data.Map.fromList columns)) []
+       in (Just tableName, DB $ Data.Map.insert tableName newTable db)
 
 insert :: String -> [(String, Value)] -> State Database (Maybe String)
-insert tableName record = state $ \db ->
+insert tableName record = state $ \(DB db) ->
   case Data.Map.lookup tableName db of
     Just (Table cols records) ->
       if validateType record cols
         then
-          let newRecord = Data.Map.fromList record
-           in (Just tableName, Data.Map.insert tableName (Table cols (newRecord : records)) db)
-        else (Nothing, db)
-    Nothing -> (Nothing, db)
+          let newRecord = Rec $ Data.Map.fromList record
+           in (Just tableName, DB $ Data.Map.insert tableName (Table cols (newRecord : records)) db)
+        else (Nothing, DB db)
+    Nothing -> (Nothing, DB db)
 
 validateType :: [(String, Value)] -> Cols -> Bool
 validateType [] cs = True
-validateType ((s, v) : xs) cs = valHelper (Data.Map.lookup s cs) v cs && validateType xs cs
+validateType ((s, v) : xs) cs = valHelper (Data.Map.lookup s (fromCols cs)) v cs && validateType xs cs
   where
     valHelper :: Maybe ValType -> Value -> Cols -> Bool
     valHelper Nothing _ _ = False
     valHelper (Just IntType) (IntVal i) _ = True
     valHelper (Just StringType) (StringVal s) _ = True
     valHelper _ NilVal _ = True
-    valHelper (Just t) (ColVal c) cs = case Data.Map.lookup c cs of
+    valHelper (Just t) (ColVal c) cs = case Data.Map.lookup c (fromCols cs) of
       Just t2 -> t == t2
       Nothing -> False
     valHelper _ _ _ = False
 
 update :: String -> [(String, Value)] -> Clause -> State Database (Maybe String)
-update tableName updates clause = state $ \db ->
+update tableName updates clause = state $ \(DB db) ->
   case Data.Map.lookup tableName db of
     Just (Table cols records) ->
       if validateType updates cols
         then
           let updatedRecords = map (updateRecord updates clause) records
-           in (Just tableName, Data.Map.insert tableName (Table cols updatedRecords) db)
-        else (Nothing, db)
-    Nothing -> (Nothing, db)
+           in (Just tableName, DB $ Data.Map.insert tableName (Table cols updatedRecords) db)
+        else (Nothing, DB db)
+    Nothing -> (Nothing, DB db)
 
 updateRecord :: [(String, Value)] -> Clause -> Record -> Record
 updateRecord updates clause record = case evalClause clause record of
@@ -85,27 +86,62 @@ updateRecord updates clause record = case evalClause clause record of
   True -> foldr (updateCol . recHelper record) record updates
     where
       updateCol :: (String, Value) -> Record -> Record
-      updateCol (n, v) = Data.Map.insert n v
+      updateCol (n, v) (Rec r) = Rec $ Data.Map.insert n v r
 
 recHelper :: Record -> (String, Value) -> (String, Value)
-recHelper record (s, ColVal c) = case Data.Map.lookup c record of
+recHelper (Rec record) (s, ColVal c) = case Data.Map.lookup c record of
   Nothing -> (s, NilVal)
   Just v -> (s, v)
 recHelper _ sv = sv
 
 delete :: String -> Clause -> State Database (Maybe String)
-delete tableName clause = state $ \db ->
+delete tableName clause = state $ \(DB db) ->
   case Data.Map.lookup tableName db of
     Just (Table cols records) ->
       let filteredRecords = filter (not . evalClause clause) records
-       in (Just tableName, Data.Map.insert tableName (Table cols filteredRecords) db)
-    Nothing -> (Nothing, db)
+       in (Just tableName, DB $ Data.Map.insert tableName (Table cols filteredRecords) db)
+    Nothing -> (Nothing, DB db)
+
+compareValue :: Value -> Value -> Ordering
+compareValue NilVal NilVal = EQ
+compareValue NilVal _ = LT
+compareValue _ NilVal = GT
+compareValue (IntVal a) (IntVal b) = compare a b
+compareValue (StringVal a) (StringVal b) = compare a b
+compareValue _ _ = error "Cannot compare different types"
+
+compareRecords :: [String] -> Record -> Record -> Ordering
+compareRecords cols rec1 rec2 =
+  mconcat [compareValue (fromMaybe NilVal $ Data.Map.lookup col (fromRecord rec1)) (fromMaybe NilVal $ Data.Map.lookup col (fromRecord rec2)) | col <- cols]
+
+orderBy :: [String] -> Bool -> Table -> Table
+orderBy [] _ table = table
+orderBy cols ascending (Table tableCols records) =
+  let comparator = if ascending then compareRecords cols else flip (compareRecords cols)
+   in Table tableCols (sortBy comparator records)
+
+groupOn :: [String] -> Table -> Table
+groupOn groupByCols (Table (Cols cols) records) =
+  let groupedRecords =
+        groupBy (\r1 r2 -> allEqual r1 r2 groupByCols) $
+          sortBy (compareRecords groupByCols) records
+      newRecords = map createGroupRecord groupedRecords
+   in Table (Cols cols) newRecords
+
+allEqual :: Record -> Record -> [String] -> Bool
+allEqual rec1 rec2 = all (\col -> Data.Map.lookup col (fromRecord rec1) == Data.Map.lookup col (fromRecord rec2))
+
+createGroupRecord :: [Record] -> Record
+createGroupRecord records =
+  case records of
+    (r : _) -> r
+    [] -> error "Empty group encountered"
 
 eval :: SQLObj -> State Database String
 eval sqlObj = case sqlObj of
-  SELECT colObj tableName whereClause ->
+  SELECT colObj table whereClause grouping order ->
     do
-      result <- select colObj tableName whereClause
+      result <- select colObj table whereClause grouping order
       return $ maybe "No such table" tableToString result
   CREATE tableName header ->
     do
@@ -124,24 +160,6 @@ eval sqlObj = case sqlObj of
       result <- delete tableName whereClause
       return $ maybe "Deletion failed" (const "Records deleted") result
 
-valueToString :: Value -> String
-valueToString NilVal = "nil"
-valueToString (IntVal i) = show i
-valueToString (StringVal s) = "'" ++ s ++ "'"
-valueToString (ColVal c) = c
-
-valTypeToString :: ValType -> String
-valTypeToString IntType = "int"
-valTypeToString StringType = "str"
-
-tableToString :: Table -> String
-tableToString (Table cols records) = unlines $ header : map showRecord records
-  where
-    colNames = Data.Map.toList cols
-    header = unwords $ map (\(name, t) -> name ++ " (" ++ valTypeToString t ++ ") |") colNames
-    showRecord :: Record -> String
-    showRecord record = unwords $ map (\(name, _) -> maybe "nil" valueToString (Data.Map.lookup name record) ++ " |") colNames
-
 evalClause :: Clause -> Record -> Bool
 evalClause clause record = case clause of
   Clause val1 val2 op -> evalOp op (resolveValue val1) (resolveValue val2)
@@ -151,7 +169,7 @@ evalClause clause record = case clause of
   NONE -> True
   where
     resolveValue :: Value -> Value
-    resolveValue v@(ColVal colName) = Data.Maybe.fromMaybe v (Data.Map.lookup colName record)
+    resolveValue v@(ColVal colName) = Data.Maybe.fromMaybe v (Data.Map.lookup colName (fromRecord record))
     resolveValue v = v
     evalOp :: ClauseOp -> Value -> Value -> Bool
     evalOp op v1 v2 = case op of
@@ -161,3 +179,13 @@ evalClause clause record = case clause of
       GTH -> Data.Maybe.fromMaybe False (clauseGe v1 v2)
       LEQ -> Data.Maybe.fromMaybe False (clauseLeq v1 v2)
       GEQ -> Data.Maybe.fromMaybe False (clauseGeq v1 v2)
+
+evalTable :: TableObj -> Map Name Table -> Table
+evalTable (TName name) db = Data.Maybe.fromMaybe (error "Table not found: ") (Data.Map.lookup name db)
+evalTable (CTE (SELECT colObj table whereClause grouping order)) db = fromMaybe (Table (Cols Data.Map.empty) []) $ evalState (select colObj table whereClause grouping order) $ DB db
+evalTable (CTE _) _ = undefined
+evalTable (INNERJOIN obj1 obj2 pairs) db = innerJoin pairs (evalTable obj1 db) (evalTable obj2 db)
+evalTable (LEFTJOIN obj1 obj2 pairs) db = leftJoin pairs (evalTable obj1 db) (evalTable obj2 db)
+evalTable (RIGHTJOIN obj1 obj2 pairs) db = rightJoin pairs (evalTable obj1 db) (evalTable obj2 db)
+evalTable (FULLJOIN obj1 obj2 pairs) db = fullJoin pairs (evalTable obj1 db) (evalTable obj2 db)
+evalTable (NATURALJOIN obj1 obj2) db = naturalJoin (evalTable obj1 db) (evalTable obj2 db)

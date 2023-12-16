@@ -1,13 +1,22 @@
 module HaSqlSyntax where
 
 import Control.Applicative (Alternative (..))
+import Control.Monad
+import Data.Bits (Bits (xor))
 import Data.Bool (Bool (True))
+import Data.Char (isSpace)
+import Data.List (dropWhileEnd)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Test.QuickCheck
 
 data SQLObj
   = SELECT
       { selectColumns :: ColumnObj,
-        fromTable :: String,
-        whereClauses :: Clause
+        fromTable :: TableObj,
+        whereClauses :: Clause,
+        grouping :: [String],
+        order :: ([String], Bool)
       }
   | CREATE
       { tableName :: String,
@@ -26,39 +35,29 @@ data SQLObj
       { deleteFrom :: String,
         deleteWhere :: Clause
       }
-  deriving (Show)
-
-instance Eq SQLObj where
-  (==) (SELECT co s cl) (SELECT co2 s2 cl2) = (co == co2) && (s == s2) && (cl == cl2)
-  (==) (CREATE s h) (CREATE s2 h2) = (s == s2) && (h == h2)
-  (==) (INSERT s r) (INSERT s2 r2) = (s == s2) && (r == r2)
-  (==) (UPDATE s r cl) (UPDATE s2 r2 cl2) = (s == s2) && (r == r2) && (cl == cl2)
-  (==) (DELETE s cl) (DELETE s2 cl2) = (s == s2) && (cl == cl2)
-  (==) _ _ = False
+  deriving (Show, Eq)
 
 data Value
   = NilVal
   | IntVal Int
   | StringVal String
   | ColVal String
-  deriving (Show)
-
-instance Eq Value where
-  (==) NilVal NilVal = True
-  (==) (IntVal i) (IntVal i2) = i == i2
-  (==) (StringVal s) (StringVal s2) = s == s2
-  (==) (ColVal c) (ColVal c2) = c == c2
-  (==) _ _ = False
+  deriving (Show, Eq)
 
 data ColumnObj
   = Star
   | Columns [String]
-  deriving (Show)
+  deriving (Show, Eq)
 
-instance Eq ColumnObj where
-  (==) Star Star = True
-  (==) (Columns cs) (Columns cs2) = cs == cs2
-  (==) _ _ = False
+data TableObj
+  = TName String
+  | CTE SQLObj
+  | INNERJOIN TableObj TableObj [(String, String)]
+  | LEFTJOIN TableObj TableObj [(String, String)]
+  | RIGHTJOIN TableObj TableObj [(String, String)]
+  | FULLJOIN TableObj TableObj [(String, String)]
+  | NATURALJOIN TableObj TableObj
+  deriving (Show, Eq)
 
 data Clause
   = Clause Value Value ClauseOp
@@ -66,15 +65,7 @@ data Clause
   | AND Clause Clause
   | NOT Clause
   | NONE
-  deriving (Show)
-
-instance Eq Clause where
-  (==) (Clause v1 v2 co) (Clause v3 v4 co2) = (v1 == v3) && (v2 == v4) && (co == co2)
-  (==) (OR c1 c2) (OR c3 c4) = (c1 == c3) && (c2 == c4)
-  (==) (AND c1 c2) (AND c3 c4) = (c1 == c3) && (c2 == c4)
-  (==) (NOT c1) (NOT c2) = c1 == c2
-  (==) NONE NONE = True
-  (==) _ _ = False
+  deriving (Show, Eq)
 
 data ClauseOp
   = EQS
@@ -83,26 +74,21 @@ data ClauseOp
   | GTH
   | GEQ
   | NEQ
-  deriving (Show)
-
-instance Eq ClauseOp where
-  (==) EQS EQS = True
-  (==) LEQ LEQ = True
-  (==) LTH LTH = True
-  (==) GTH GTH = True
-  (==) GEQ GEQ = True
-  (==) NEQ NEQ = True
-  (==) _ _ = False
+  deriving (Show, Eq)
 
 data ValType
   = IntType
   | StringType
-  deriving (Show)
+  deriving (Show, Eq)
 
-instance Eq ValType where
-  (==) IntType IntType = True
-  (==) StringType StringType = True
-  (==) _ _ = False
+data Command
+  = SAVE
+  | SAVEAS String
+  | LOAD String
+  | NEW String
+  | QUIT
+  | SCRIPT String
+  deriving (Show, Eq)
 
 clauseEq :: Value -> Value -> Maybe Bool
 clauseEq NilVal NilVal = Just True
@@ -139,3 +125,126 @@ clauseGeq NilVal NilVal = Just True
 clauseGeq (IntVal x) (IntVal y) = Just (x >= y)
 clauseGeq (StringVal x) (StringVal y) = Just (x >= y)
 clauseGeq _ _ = Nothing
+
+data DBLoad = DBLoad (Maybe Database) (Maybe String)
+
+newtype Cols = Cols (Map String ValType)
+  deriving (Show)
+
+type Name = String
+
+newtype Database = DB (Map Name Table)
+
+data Table = Table Cols [Record]
+  deriving (Show)
+
+newtype Record = Rec (Map String Value)
+  deriving (Show)
+
+fromRecord :: Record -> Map String Value
+fromRecord (Rec x) = x
+
+fromDatabase :: Database -> Map Name Table
+fromDatabase (DB x) = x
+
+fromCols :: Cols -> Map String ValType
+fromCols (Cols x) = x
+
+valueToString :: Value -> String
+valueToString NilVal = "nil"
+valueToString (IntVal i) = show i
+valueToString (StringVal s) = "'" ++ s ++ "'"
+valueToString (ColVal c) = c
+
+valTypeToString :: ValType -> String
+valTypeToString IntType = "int"
+valTypeToString StringType = "str"
+
+tableToString :: Table -> String
+tableToString (Table cols records) = dropWhileEnd isSpace $ unlines $ header : map showRecord records
+  where
+    colNames = Map.toList $ fromCols cols
+    header = unwords $ map (\(name, t) -> name ++ " (" ++ valTypeToString t ++ ") |") colNames
+    showRecord :: Record -> String
+    showRecord record = unwords $ map (\(name, _) -> maybe "nil" valueToString (Map.lookup name $ fromRecord record) ++ " |") colNames
+
+databaseToString :: Database -> String
+databaseToString db = concatMap showTable $ Map.toList $ fromDatabase db
+  where
+    showTable :: (Name, Table) -> String
+    showTable (name, table) = "{" ++ name ++ "}\n" ++ tableToString table ++ "\n{END_TABLE}\n"
+
+instance Arbitrary ValType where
+  arbitrary = elements [IntType, StringType]
+
+instance Arbitrary Value where
+  arbitrary =
+    oneof
+      [ return NilVal,
+        IntVal <$> arbitrary,
+        StringVal <$> arbitrary,
+        ColVal <$> arbitrary
+      ]
+
+arbitraryColumnName :: Gen String
+arbitraryColumnName = listOf1 $ elements ['a' .. 'z']
+
+arbitraryStringValue :: Gen String
+arbitraryStringValue = listOf1 $ suchThat arbitrary (/= '\'')
+
+arbitraryValue :: ValType -> Gen Value
+arbitraryValue IntType =
+  frequency
+    [ (1, return NilVal),
+      (3, IntVal <$> arbitrary)
+    ]
+arbitraryValue StringType =
+  frequency
+    [ (1, return NilVal),
+      (3, StringVal <$> arbitraryStringValue)
+    ]
+
+instance Arbitrary Cols where
+  arbitrary = do
+    keys <- listOf1 arbitraryColumnName
+    vals <- vectorOf (length keys) arbitrary
+    return $ Cols $ Map.fromList (zip keys vals)
+
+arbitraryRecord :: Cols -> Gen Record
+arbitraryRecord cs = Rec . Map.fromList <$> mapM createEntry (Map.toList $ fromCols cs)
+  where
+    createEntry :: (String, ValType) -> Gen (String, Value)
+    createEntry (name, vType) = do
+      value <- arbitraryValue vType
+      return (name, value)
+
+instance Arbitrary Table where
+  arbitrary = do
+    cols <- arbitrary
+    records <- listOf (arbitraryRecord cols)
+    return $ Table cols records
+
+instance Arbitrary Database where
+  arbitrary = do
+    keys <- listOf1 arbitraryColumnName
+    vals <- vectorOf (length keys) arbitrary
+    return $ DB $ Map.fromList (zip keys vals)
+
+instance Arbitrary ClauseOp where
+  arbitrary = elements [EQS, LEQ, LTH, GTH, GEQ, NEQ]
+
+instance Arbitrary Clause where
+  arbitrary = sized clauseGen
+
+clauseGen :: Int -> Gen Clause
+clauseGen 0 = return NONE -- Base case to stop recursion
+clauseGen n =
+  oneof
+    [ liftM3 Clause arbitrary arbitrary arbitrary,
+      liftM2 OR subClause subClause,
+      liftM2 AND subClause subClause,
+      NOT <$> subClause,
+      return NONE
+    ]
+  where
+    subClause = clauseGen (n `div` 2)

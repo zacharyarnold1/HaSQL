@@ -87,3 +87,16 @@ Where clauses:
 
     I want records only if age is greater than 20 and there name is either Zach and Kailash.... 
     [IF] ({{age > 20} AND {{name == 'Kailash'} OR {name == 'Zach'}}})
+
+
+[LET] (....) [BE] (temp table name) [GET] ...
+
+[GET] (*) [IN] ({(t1) [JOIN] {(t2) [JOIN] (t3) [ON] (condition)} [ON] (condition)})
+
+
+INNERJOIN = MATCH 
+LEFTJOIN = MATCHLEFT
+RIGHTJOIN = MATCHRIGHT
+FULLJOIN = MATCHFULL
+NATURALJOIN = MATCHREG
+ON = SUCHTHAT

@@ -1,7 +1,8 @@
 module HaSqlParser where
 
+import Data.Char (isAlphaNum)
+import Data.List (intercalate)
 import HaSqlSyntax
-import HaSqlSyntax (Clause (NONE))
 import Text.Parsec
 import Text.Parsec.Language (emptyDef)
 import Text.Parsec.String (Parser)
@@ -126,7 +127,7 @@ stringLiteralParser = do
 
 nameParser :: Parser String
 nameParser = do
-  many1 (noneOf "0123456789 (){}[],")
+  many1 (noneOf "0123456789 (){}[],\n'")
 
 valueParser :: Parser Value
 valueParser =
@@ -275,3 +276,80 @@ clauseParser =
           char '}'
           return (NOT subClause)
       )
+
+parseCommand :: String -> Either ParseError Command
+parseCommand input = parse commandParser "" input
+
+commandParser :: Parser Command
+commandParser = do try parseSaveAs <|> try parseSave <|> try parseLoad <|> try parseNew <|> try parseQuit <|> try parseScript
+
+parseSave :: Parser Command
+parseSave = string "SAVE" >> return SAVE
+
+parseSaveAs :: Parser Command
+parseSaveAs = do
+  string "SAVE AS"
+  spaces
+  name <- many1 (satisfy isAlphaNum)
+  return (SAVEAS name)
+
+parseLoad :: Parser Command
+parseLoad = do
+  string "LOAD"
+  spaces
+  name <- many1 (satisfy isAlphaNum)
+  return (LOAD name)
+
+parseNew :: Parser Command
+parseNew = do
+  string "NEW"
+  spaces
+  name <- many1 (satisfy isAlphaNum)
+  return (NEW name)
+
+parseQuit :: Parser Command
+parseQuit = string "QUIT" >> return QUIT
+
+parseScript :: Parser Command
+parseScript = do
+  string "SCRIPT"
+  spaces
+  name <- many1 (noneOf "0123456789 (){}[],\n'")
+  return (SCRIPT name)
+
+prettyPrintSQLObj :: SQLObj -> String
+prettyPrintSQLObj (SELECT cols table whereCls) =
+  "[GET] "
+    ++ prettyPrintColumnObj cols
+    ++ " [IN] ("
+    ++ table
+    ++ ") "
+    ++ prettyPrintClause whereCls
+prettyPrintSQLObj (CREATE table header) =
+  "[MAKE] (" ++ table ++ ") [WITH] " ++ prettyPrintHeader header
+prettyPrintSQLObj (INSERT table record) =
+  "[PUT] (" ++ table ++ ") [WITH] " ++ prettyPrintRecord record
+prettyPrintSQLObj (UPDATE table record whereCls) =
+  "[CHANGE] ("
+    ++ table
+    ++ ") [TO] "
+    ++ prettyPrintRecord record
+    ++ " "
+    ++ prettyPrintClause whereCls
+prettyPrintSQLObj (DELETE table whereCls) =
+  "[REMOVEFROM] (" ++ table ++ ") " ++ prettyPrintClause whereCls
+
+prettyPrintColumnObj :: ColumnObj -> String
+prettyPrintColumnObj Star = "(*)"
+prettyPrintColumnObj (Columns xs) = intercalate ", " xs
+
+prettyPrintClause :: Clause -> String
+prettyPrintClause v1 v2 co = prettyPrintValue v1 ++ prettyPrintClauseOp co ++ prettyPrintValue v2
+
+prettyPrintClauseOp :: ClauseOp -> String
+prettyPrintClauseOp EQS = " == "
+prettyPrintClauseOp GEQ = " >= "
+prettyPrintClauseOp GTH = " > "
+prettyPrintClauseOp LEQ = " <= "
+prettyPrintClauseOp LTH = " < "
+prettyPrintClauseOp NEQ = " /= "
