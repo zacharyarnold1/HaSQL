@@ -12,7 +12,7 @@ import Text.Parsec.Token qualified as Token
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser style
   where
-    ops = ["[GET]", "[IN]", "[IF]", "[MAKE]", "[PUT]", "[CHANGE]", "[TO]", "[DELETE]", "[WITH], [REMOVEFROM]"]
+    ops = ["[GET]", "[IN]", "[IF]", "[MAKE]", "[PUT]", "[CHANGE]", "[TO]", "[DELETE]", "[WITH]", "[REMOVEFROM]", "[LET]", "[BE]", "[COMBINE]", "[ORDER]"]
     names = []
     style =
       emptyDef
@@ -32,10 +32,29 @@ identifier = Token.identifier lexer
 parseDSL :: String -> Either ParseError SQLObj
 parseDSL input = parse dslParser "" input
 
-dslParser :: Parser SQLObj
-dslParser = do try parseSelect <|> try parseCreate <|> try parseInsert <|> try parseUpdate <|> parseDelete
+dslParserWithCTEs :: Parser (SQLObj, [(String, SQLObj)])
+dslParserWithCTEs = do
+  ctes <- sepBy parseCTE (char ',' >> spaces)
+  spaces
+  sqlobj <- dslParser
+  return (sqlobj, ctes)
 
--- Example: parser for SELECT statement
+dslParser :: Parser SQLObj
+dslParser = try parseSelect <|> try parseCreate <|> try parseInsert <|> try parseUpdate <|> parseDelete
+
+parseCTE :: Parser (String, SQLObj)
+parseCTE = do
+  reservedOp "[LET]"
+  spaces
+  char '('
+  sel <- parseSelect
+  char ')'
+  spaces
+  reservedOp "[BE]"
+  spaces
+  tableName <- nameParser
+  return (tableName, sel)
+
 parseSelect :: Parser SQLObj
 parseSelect = do
   reservedOp "[GET]"
@@ -45,10 +64,37 @@ parseSelect = do
   reservedOp "[IN]"
   spaces
   char '('
-  table <- nameParser
+  table <- parseTable
   char ')'
-  whereClause <- parseClauseWithNone
-  return SELECT {selectColumns = cols, fromTable = table, whereClauses = whereClause}
+  spaces
+  whereClause <- option NONE parseClause
+  groupClause <- option [] parseGrouping
+  ordering <- option ([], False) parseOrdering
+  return SELECT {selectColumns = cols, fromTable = table, whereClauses = whereClause, grouping = groupClause, order = ordering}
+
+parseGrouping :: Parser [String]
+parseGrouping = do
+  spaces
+  reservedOp "[COMBINE]"
+  spaces
+  cols <- columnListParser
+  return cols
+  
+parseOrdering :: Parser ([String], Bool)
+parseOrdering = do
+  spaces 
+  reservedOp "[ORDER]"
+  spaces
+  cols <- columnListParser
+  spaces
+  char '('
+  direction <- nameParser
+  char ')'
+  let bool = case direction of
+               "ascending" -> True
+               "descending" -> False
+               _ -> error "Invalid ordering direction"
+  return (cols, bool)
 
 parseCreate :: Parser SQLObj
 parseCreate = do
@@ -87,7 +133,8 @@ parseUpdate = do
   reservedOp "[TO]"
   spaces
   record <- parseRecord
-  clause <- parseClauseWithNone
+  spaces
+  clause <- option NONE parseClause
   return UPDATE {tableName = table, record = record, updateWhere = clause}
 
 parseDelete :: Parser SQLObj
@@ -97,8 +144,123 @@ parseDelete = do
   char '('
   table <- nameParser
   char ')'
-  clause <- parseClauseWithNone
+  spaces
+  clause <- option NONE parseClause
   return DELETE {deleteFrom = table, deleteWhere = clause}
+
+parseTable :: Parser TableObj
+parseTable = try parseJoin <|> try parseCTEalt <|> parseTableName
+
+parseCTEalt :: Parser TableObj
+parseCTEalt = do CTE <$> parseSelect
+
+parseTableName :: Parser TableObj
+parseTableName = do
+  name <- many1 (noneOf "0123456789 (){}[],\n'") -- Adjust according to your naming conventions
+  return $ TName name
+
+parseJoin :: Parser TableObj
+parseJoin = try parseInnerJoin <|> try parseLeftJoin <|> try parseRightJoin <|> try parseFullJoin <|> parseNaturalJoin
+
+parseInnerJoin :: Parser TableObj
+parseInnerJoin = do
+  char '('
+  table1 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[MATCH]"
+  spaces
+  char '('
+  table2 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[ON]"
+  spaces
+  char '('
+  conds <- sepBy parseCondition (char ',' >> spaces)
+  char ')'
+  return $ INNERJOIN table1 table2 conds
+
+parseLeftJoin :: Parser TableObj
+parseLeftJoin = do
+  char '('
+  table1 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[MATCHLEFT]"
+  spaces
+  char '('
+  table2 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[ON]"
+  spaces
+  char '('
+  conds <- sepBy parseCondition (char ',' >> spaces)
+  char ')'
+  return $ LEFTJOIN table1 table2 conds
+
+parseRightJoin :: Parser TableObj
+parseRightJoin = do
+  char '('
+  table1 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[MATCHRIGHT]"
+  spaces
+  char '('
+  table2 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[ON]"
+  spaces
+  char '('
+  conds <- sepBy parseCondition (char ',' >> spaces)
+  char ')'
+  return $ RIGHTJOIN table1 table2 conds
+
+parseFullJoin :: Parser TableObj
+parseFullJoin = do
+  char '('
+  table1 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[MATCHFULL]"
+  spaces
+  char '('
+  table2 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[ON]"
+  spaces
+  char '('
+  conds <- sepBy parseCondition (char ',' >> spaces)
+  char ')'
+  return $ FULLJOIN table1 table2 conds
+
+parseNaturalJoin :: Parser TableObj
+parseNaturalJoin = do
+  char '('
+  table1 <- parseTable
+  char ')'
+  spaces
+  reservedOp "[MATCHREG]"
+  spaces
+  char '('
+  table2 <- parseTable
+  char ')'
+  return $ NATURALJOIN table1 table2
+
+parseCondition :: Parser (String, String)
+parseCondition = do
+  char '{'
+  col1 <- many1 (noneOf "0123456789 (){}[],\n'")
+  char ','
+  spaces
+  col2 <- many1 (noneOf "0123456789 (){}[],\n'")
+  char '}'
+  return (col1, col2)
+
 
 -- Placeholder functions (to be implemented)
 parseColumns :: Parser ColumnObj
@@ -221,14 +383,8 @@ singleClauseParser = do
   char '}'
   return (Clause firstValue secondValue op)
 
-parseClauseWithNone :: Parser Clause
-parseClauseWithNone =
-  try parseClause
-    <|> return NONE
-
 parseClause :: Parser Clause
 parseClause = do
-  spaces
   reservedOp "[IF]"
   spaces
   char '('
@@ -317,39 +473,39 @@ parseScript = do
   name <- many1 (noneOf "0123456789 (){}[],\n'")
   return (SCRIPT name)
 
-prettyPrintSQLObj :: SQLObj -> String
-prettyPrintSQLObj (SELECT cols table whereCls) =
-  "[GET] "
-    ++ prettyPrintColumnObj cols
-    ++ " [IN] ("
-    ++ table
-    ++ ") "
-    ++ prettyPrintClause whereCls
-prettyPrintSQLObj (CREATE table header) =
-  "[MAKE] (" ++ table ++ ") [WITH] " ++ prettyPrintHeader header
-prettyPrintSQLObj (INSERT table record) =
-  "[PUT] (" ++ table ++ ") [WITH] " ++ prettyPrintRecord record
-prettyPrintSQLObj (UPDATE table record whereCls) =
-  "[CHANGE] ("
-    ++ table
-    ++ ") [TO] "
-    ++ prettyPrintRecord record
-    ++ " "
-    ++ prettyPrintClause whereCls
-prettyPrintSQLObj (DELETE table whereCls) =
-  "[REMOVEFROM] (" ++ table ++ ") " ++ prettyPrintClause whereCls
+-- prettyPrintSQLObj :: SQLObj -> String
+-- prettyPrintSQLObj (SELECT cols table whereCls) =
+--   "[GET] "
+--     ++ prettyPrintColumnObj cols
+--     ++ " [IN] ("
+--     ++ table
+--     ++ ") "
+--     ++ prettyPrintClause whereCls
+-- prettyPrintSQLObj (CREATE table header) =
+--   "[MAKE] (" ++ table ++ ") [WITH] " ++ prettyPrintHeader header
+-- prettyPrintSQLObj (INSERT table record) =
+--   "[PUT] (" ++ table ++ ") [WITH] " ++ prettyPrintRecord record
+-- prettyPrintSQLObj (UPDATE table record whereCls) =
+--   "[CHANGE] ("
+--     ++ table
+--     ++ ") [TO] "
+--     ++ prettyPrintRecord record
+--     ++ " "
+--     ++ prettyPrintClause whereCls
+-- prettyPrintSQLObj (DELETE table whereCls) =
+--   "[REMOVEFROM] (" ++ table ++ ") " ++ prettyPrintClause whereCls
 
-prettyPrintColumnObj :: ColumnObj -> String
-prettyPrintColumnObj Star = "(*)"
-prettyPrintColumnObj (Columns xs) = intercalate ", " xs
+-- prettyPrintColumnObj :: ColumnObj -> String
+-- prettyPrintColumnObj Star = "(*)"
+-- prettyPrintColumnObj (Columns xs) = intercalate ", " xs
 
-prettyPrintClause :: Clause -> String
-prettyPrintClause v1 v2 co = prettyPrintValue v1 ++ prettyPrintClauseOp co ++ prettyPrintValue v2
+-- prettyPrintClause :: Clause -> String
+-- prettyPrintClause v1 v2 co = prettyPrintValue v1 ++ prettyPrintClauseOp co ++ prettyPrintValue v2
 
-prettyPrintClauseOp :: ClauseOp -> String
-prettyPrintClauseOp EQS = " == "
-prettyPrintClauseOp GEQ = " >= "
-prettyPrintClauseOp GTH = " > "
-prettyPrintClauseOp LEQ = " <= "
-prettyPrintClauseOp LTH = " < "
-prettyPrintClauseOp NEQ = " /= "
+-- prettyPrintClauseOp :: ClauseOp -> String
+-- prettyPrintClauseOp EQS = " == "
+-- prettyPrintClauseOp GEQ = " >= "
+-- prettyPrintClauseOp GTH = " > "
+-- prettyPrintClauseOp LEQ = " <= "
+-- prettyPrintClauseOp LTH = " < "
+-- prettyPrintClauseOp NEQ = " /= "

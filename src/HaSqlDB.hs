@@ -10,9 +10,23 @@ import Data.Ord (Down (Down), comparing)
 import HaSqlSyntax
 import HaSqlTables
 
-select :: ColumnObj -> TableObj -> Clause -> [String] -> ([String], Bool) -> State Database (Maybe Table)
-select cs tableObj clause groupByCols (orderByCols, d) = state $ \(DB db) ->
-  let table = evalTable tableObj db
+selectCTEhelper :: TableObj -> Map String SQLObj -> TableObj
+selectCTEhelper (TName s) m = 
+  case Data.Map.lookup s m of
+    Just so -> CTE so
+    Nothing -> TName s
+selectCTEhelper (CTE so) _ = CTE so
+selectCTEhelper (INNERJOIN to1 to2 con) m = INNERJOIN (selectCTEhelper to1 m) (selectCTEhelper to2 m) con
+selectCTEhelper (LEFTJOIN to1 to2 con) m = LEFTJOIN (selectCTEhelper to1 m) (selectCTEhelper to2 m) con
+selectCTEhelper (RIGHTJOIN to1 to2 con) m = RIGHTJOIN (selectCTEhelper to1 m) (selectCTEhelper to2 m) con
+selectCTEhelper (FULLJOIN to1 to2 con) m = FULLJOIN (selectCTEhelper to1 m) (selectCTEhelper to2 m) con
+selectCTEhelper (NATURALJOIN to1 to2) m = NATURALJOIN (selectCTEhelper to1 m) (selectCTEhelper to2 m)
+
+
+select :: ColumnObj -> TableObj -> Map String SQLObj -> Clause -> [String] -> ([String], Bool) -> State Database (Maybe Table)
+select cs tableObj selMap clause groupByCols (orderByCols, d) = state $ \(DB db) ->
+  let modTableObj = selectCTEhelper tableObj selMap
+      table = evalTable modTableObj selMap db
       filteredRecords = filter (evalClause clause) (recordsFromTable table)
       selectedTable = selectHelper cs (Table (colsFromTable table) filteredRecords)
       groupedTable = groupOn groupByCols selectedTable
@@ -137,11 +151,14 @@ createGroupRecord records =
     (r : _) -> r
     [] -> error "Empty group encountered"
 
-eval :: SQLObj -> State Database String
-eval sqlObj = case sqlObj of
+eval :: (SQLObj, [(String, SQLObj)]) -> State Database String
+eval (sqlObj, l) =
+  let m = Data.Map.fromList l
+    in
+  case sqlObj of
   SELECT colObj table whereClause grouping order ->
     do
-      result <- select colObj table whereClause grouping order
+      result <- select colObj table m whereClause grouping order
       return $ maybe "No such table" tableToString result
   CREATE tableName header ->
     do
@@ -180,12 +197,12 @@ evalClause clause record = case clause of
       LEQ -> Data.Maybe.fromMaybe False (clauseLeq v1 v2)
       GEQ -> Data.Maybe.fromMaybe False (clauseGeq v1 v2)
 
-evalTable :: TableObj -> Map Name Table -> Table
-evalTable (TName name) db = Data.Maybe.fromMaybe (error "Table not found: ") (Data.Map.lookup name db)
-evalTable (CTE (SELECT colObj table whereClause grouping order)) db = fromMaybe (Table (Cols Data.Map.empty) []) $ evalState (select colObj table whereClause grouping order) $ DB db
-evalTable (CTE _) _ = undefined
-evalTable (INNERJOIN obj1 obj2 pairs) db = innerJoin pairs (evalTable obj1 db) (evalTable obj2 db)
-evalTable (LEFTJOIN obj1 obj2 pairs) db = leftJoin pairs (evalTable obj1 db) (evalTable obj2 db)
-evalTable (RIGHTJOIN obj1 obj2 pairs) db = rightJoin pairs (evalTable obj1 db) (evalTable obj2 db)
-evalTable (FULLJOIN obj1 obj2 pairs) db = fullJoin pairs (evalTable obj1 db) (evalTable obj2 db)
-evalTable (NATURALJOIN obj1 obj2) db = naturalJoin (evalTable obj1 db) (evalTable obj2 db)
+evalTable :: TableObj -> Map String SQLObj -> Map Name Table -> Table
+evalTable (TName name) m db = Data.Maybe.fromMaybe (error "Table not found: ") (Data.Map.lookup name db)
+evalTable (CTE (SELECT colObj table whereClause grouping order)) m db = fromMaybe (Table (Cols Data.Map.empty) []) $ evalState (select colObj table m whereClause grouping order) $ DB db
+evalTable (CTE _) _ _ = undefined
+evalTable (INNERJOIN obj1 obj2 pairs) m db = innerJoin pairs (evalTable obj1 m db) (evalTable obj2 m db)
+evalTable (LEFTJOIN obj1 obj2 pairs) m db = leftJoin pairs (evalTable obj1 m db) (evalTable obj2 m db)
+evalTable (RIGHTJOIN obj1 obj2 pairs) m db = rightJoin pairs (evalTable obj1 m db) (evalTable obj2 m db)
+evalTable (FULLJOIN obj1 obj2 pairs) m db = fullJoin pairs (evalTable obj1 m db) (evalTable obj2 m db)
+evalTable (NATURALJOIN obj1 obj2) m db = naturalJoin (evalTable obj1 m db) (evalTable obj2 m db)
