@@ -2,13 +2,7 @@ module HaSqlSyntax where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad
-import Data.Bits (Bits (xor))
-import Data.Bool (Bool (True))
-import Data.Char (isSpace)
-import Data.List (dropWhileEnd)
 import Data.Map (Map)
-import Data.Map qualified as Map
-import Test.QuickCheck
 
 -- Represents a SQL operation, i.e. the CRUD operations
 data SQLObj
@@ -115,54 +109,12 @@ data Command
   | DELETEDB String
   deriving (Show, Eq)
 
--- compares two value instances for equality
-clauseEq :: Value -> Value -> Maybe Bool
-clauseEq NilVal NilVal = Just True
-clauseEq (IntVal x) (IntVal y) = Just (x == y)
-clauseEq (StringVal x) (StringVal y) = Just (x == y)
-clauseEq _ _ = Nothing
-
--- compares two value instances for inequality
-clauseNeq :: Value -> Value -> Maybe Bool
-clauseNeq NilVal NilVal = Just False
-clauseNeq (IntVal x) (IntVal y) = Just (x /= y)
-clauseNeq (StringVal x) (StringVal y) = Just (x /= y)
-clauseNeq _ _ = Nothing
-
--- compares two value instances to check if the first is less than the second
-clauseLe :: Value -> Value -> Maybe Bool
-clauseLe NilVal NilVal = Just False
-clauseLe (IntVal x) (IntVal y) = Just (x < y)
-clauseLe (StringVal x) (StringVal y) = Just (x < y)
-clauseLe _ _ = Nothing
-
--- compares two value instances to check if the first is greater than the second
-clauseGe :: Value -> Value -> Maybe Bool
-clauseGe NilVal NilVal = Just False
-clauseGe (IntVal x) (IntVal y) = Just (x > y)
-clauseGe (StringVal x) (StringVal y) = Just (x > y)
-clauseGe _ _ = Nothing
-
--- compares two value instances to check if the first is less or equal to the second
-clauseLeq :: Value -> Value -> Maybe Bool
-clauseLeq NilVal NilVal = Just True
-clauseLeq (IntVal x) (IntVal y) = Just (x <= y)
-clauseLeq (StringVal x) (StringVal y) = Just (x <= y)
-clauseLeq _ _ = Nothing
-
--- compares two value instances to check if the first is greater than or equak to the second
-clauseGeq :: Value -> Value -> Maybe Bool
-clauseGeq NilVal NilVal = Just True
-clauseGeq (IntVal x) (IntVal y) = Just (x >= y)
-clauseGeq (StringVal x) (StringVal y) = Just (x >= y)
-clauseGeq _ _ = Nothing
-
 -- Wrapper to pair database with its name
 data DBLoad = DBLoad (Maybe Database) (Maybe String)
 
 -- Schema of a table (column names and their types)
 newtype Cols = Cols (Map String ValType)
-  deriving (Show)
+  deriving (Show, Eq)
 
 type Name = String
 
@@ -172,7 +124,7 @@ newtype Database = DB (Map Name Table)
 
 -- Table in a database (columns and records).
 data Table = Table Cols [Record]
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- Record in a table, maps column names to values
 newtype Record = Rec (Map String Value)
@@ -190,132 +142,10 @@ fromDatabase (DB x) = x
 fromCols :: Cols -> Map String ValType
 fromCols (Cols x) = x
 
--- converts value to string representation
-valueToString :: Value -> String
-valueToString NilVal = "nil"
-valueToString (IntVal i) = show i
-valueToString (StringVal s) = "'" ++ s ++ "'"
-valueToString (ColVal c) = c
+-- returns the columns (attributes with column names and type) from an inputted table
+colsFromTable :: Table -> Cols
+colsFromTable (Table cols _) = cols
 
--- converts type of value to string representation
-valTypeToString :: ValType -> String
-valTypeToString IntType = "int"
-valTypeToString StringType = "str"
-
--- converts table to string representation
-tableToString :: Table -> String
-tableToString (Table cols records) = dropWhileEnd isSpace $ unlines $ header : map showRecord records
-  where
-    colNames = Map.toList $ fromCols cols
-    header = unwords $ map (\(name, t) -> name ++ " (" ++ valTypeToString t ++ ") |") colNames
-    showRecord :: Record -> String
-    showRecord record = unwords $ map (\(name, _) -> maybe "nil" valueToString (Map.lookup name $ fromRecord record) ++ " |") colNames
-
--- converts database to string representation
-databaseToString :: Database -> String
-databaseToString db = concatMap showTable $ Map.toList $ fromDatabase db
-  where
-    showTable :: (Name, Table) -> String
-    showTable (name, table) = "{" ++ name ++ "}\n" ++ tableToString table ++ "\n{END_TABLE}\n"
-
--- Generates arbitrary ValType
-instance Arbitrary ValType where
-  arbitrary = elements [IntType, StringType]
-
--- Generates arbitrary Value values
-instance Arbitrary Value where
-  arbitrary =
-    oneof
-      [ return NilVal,
-        IntVal <$> arbitrary,
-        StringVal <$> arbitrary,
-        ColVal <$> arbitrary
-      ]
-
--- Generates arbitrary column name
-arbitraryColumnName :: Gen String
-arbitraryColumnName = listOf1 $ elements ['a' .. 'z']
-
--- Generates arbitrary String values
-arbitraryStringValue :: Gen String
-arbitraryStringValue = listOf1 $ suchThat arbitrary (/= '\'')
-
--- Generates arbitrary value based on given ValType
-arbitraryValue :: ValType -> Gen Value
-arbitraryValue IntType =
-  frequency
-    [ (1, return NilVal),
-      (3, IntVal <$> arbitrary)
-    ]
-arbitraryValue StringType =
-  frequency
-    [ (1, return NilVal),
-      (3, StringVal <$> arbitraryStringValue)
-    ]
-
--- Generates arbitry Cols (column schema)
-instance Arbitrary Cols where
-  arbitrary = do
-    keys <- listOf1 arbitraryColumnName
-    vals <- vectorOf (length keys) arbitrary
-    return $ Cols $ Map.fromList (zip keys vals)
-
--- Generates a list of (column name, Value) pairs matching the column schema of a table
-genMatchingRecord :: Table -> Gen [(String, Value)]
-genMatchingRecord (Table cols _) = arbitraryKeyVal cols
-
--- Helper function to generate a list of (column name, Value) pairs for given Cols
-arbitraryKeyVal :: Cols -> Gen [(String, Value)]
-arbitraryKeyVal cs = mapM createEntry (Map.toList $ fromCols cs)
-  where
-    createEntry :: (String, ValType) -> Gen (String, Value)
-    createEntry (name, vType) = do
-      value <- arbitraryValue vType
-      return (name, value)
-
--- Instance for generating arbitrary Records based on given columns
-arbitraryRecord :: Cols -> Gen Record
-arbitraryRecord cs = Rec . Map.fromList <$> arbitraryKeyVal cs
-
--- Generates arbitrary Table
-instance Arbitrary Table where
-  arbitrary = do
-    cols <- arbitrary
-    records <- listOf (arbitraryRecord cols)
-    return $ Table cols records
-
--- Generates arbitrary Database
-instance Arbitrary Database where
-  arbitrary = do
-    keys <- listOf1 arbitraryColumnName
-    vals <- vectorOf (length keys) arbitrary
-    return $ DB $ Map.fromList (zip keys vals)
-
--- Generates arbitrary cluase operator
-instance Arbitrary ClauseOp where
-  arbitrary = elements [EQS, LEQ, LTH, GTH, GEQ, NEQ]
-
--- Generates arbitrary clause
-instance Arbitrary Clause where
-  arbitrary = sized clauseGen
-
--- Recursive generator for arbitrary Clause values
-clauseGen :: Int -> Gen Clause
-clauseGen 0 = return NONE -- Base case to stop recursion
-clauseGen n =
-  oneof
-    [ liftM3 Clause arbitrary arbitrary arbitrary,
-      liftM2 OR subClause subClause,
-      liftM2 AND subClause subClause,
-      NOT <$> subClause,
-      return NONE
-    ]
-  where
-    subClause = clauseGen (n `div` 2)
-
--- Generator for arbitrary table names from a given Database
-tableNameGen :: Database -> Gen String
-tableNameGen (DB db) =
-  if Map.null db
-    then return "defaultTable" -- Fallback for an empty database
-    else elements (Map.keys db)
+-- returns all the records from an inputted table
+recordsFromTable :: Table -> [Record]
+recordsFromTable (Table _ records) = records

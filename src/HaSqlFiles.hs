@@ -1,8 +1,9 @@
 module HaSqlFiles where
 
 import Control.Exception.Base
+import HaSqlLoadParser
 import HaSqlSyntax
-import LoadParser
+import HaSqlToString
 import System.Directory (removeFile)
 import System.IO.Error (isDoesNotExistError)
 
@@ -25,9 +26,6 @@ deleteDatabase dbName = do
         then putStrLn "DB Dosen't Exist"
         else ioError ex
     Right _ -> putStrLn "DB Deleted Successfully"
-
--- removes a file of specified name (i.e. deletes contents of a database in memory)
--- removeFile fileName
 
 -- loads a database specified by its name by deserializing the contents of the textfile, returns a DBLoad containing contents of the saved database
 loadDatabase :: String -> IO DBLoad

@@ -1,4 +1,4 @@
-module LoadParser where
+module HaSqlLoadParser where
 
 import Data.Char (isDigit)
 import Data.Map (Map)
@@ -53,7 +53,7 @@ databaseParser = do
   return $ DB $ Map.fromList tables
 
 parseDatabaseString :: String -> Either ParseError Database
-parseDatabaseString input = parse databaseParser "" input
+parseDatabaseString = parse databaseParser ""
 
 recordParser :: [(String, ValType)] -> Parser Record
 recordParser headers = Rec . Map.fromList <$> sequence [cellParser name | (name, _) <- headers]

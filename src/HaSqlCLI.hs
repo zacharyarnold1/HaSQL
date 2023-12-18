@@ -6,35 +6,14 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import HaSqlDB
 import HaSqlFiles
-import HaSqlParser
+import HaSqlMainParser
+import HaSqlOpsComParser
 import HaSqlSyntax
-import LoadParser (parseDatabaseString)
 import System.IO (isEOF)
 
 -- Main function for the CLI
 main :: IO ()
 main = cliLoop (DBLoad Nothing Nothing)
-
--- Helper for script excuter, executes a single line of the script
-executeLine :: Database -> String -> IO Database
-executeLine db line = case mainParse line of
-  Left err -> print err >> return db
-  Right sql ->
-    let (s, a) = runState (eval sql) db
-     in return a
-
--- Runs a script of DSL commands, repeatedly calls executeLine
-runScript :: Database -> FilePath -> IO Database
-runScript db filePath = do
-  content <- readFile ("scripts/" ++ filePath)
-  let linesOfContent = lines content
-  db2 <- foldM executeLine db linesOfContent
-  putStrLn "Script executed"
-  return db2
-
--- For a inputted script, returns if that script is valid or not
-validateScript :: FilePath -> Bool
-validateScript = undefined
 
 -- The client loop, runs HaSqlDB
 cliLoop :: DBLoad -> IO ()
