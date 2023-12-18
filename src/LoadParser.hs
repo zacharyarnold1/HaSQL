@@ -62,12 +62,3 @@ recordParser headers = Rec . Map.fromList <$> sequence [cellParser name | (name,
       value <- valueParser
       optional (try (spaces >> char '|' >> spaces))
       return (name, value)
-
-testParseHeader :: Either ParseError [(String, ValType)]
-testParseHeader = parse headerParser "" "boss (str) | division (str) | name (str) | salary (int) |\n"
-
-testParseTable :: Either ParseError (String, Table)
-testParseTable = parse tableParser "" "{employeesA}\nboss (str) | division (str) | name (str) | salary (int) |\nnil | nil | 'Professor Weirich' | 5000000000 |\nnil | 'Finance' | 'Eli' | 100000 |\n'Bosswoman' | 'Biology' | 'Amanda' | 130000 |\n'Bosswoman' | 'HWE' | 'Shyam' | 150000 |\n'Bossman' | 'Swagonometry' | 'Zach' | nil |\n'Bossman' | 'SWE' | 'Kailash' | 100000 |\n{END_TABLE}"
-
-testParseDatabase :: Either ParseError Database
-testParseDatabase = parse databaseParser "" "{employeesA}\nboss (str) | division (str) | name (str) | salary (int) |\n'Professor Weirich' | 'Professor Weirich' | 'Professor Weirich' | 5000000000 |\nnil | 'Finance' | 'Eli' | 100000 |\n'Bosswoman' | 'Biology' | 'Amanda' | 130000 |\n'Bosswoman' | 'HWE' | 'Shyam' | 150000 |\n'Bossman' | 'Swagonometry' | 'Zach' | nil |\n'Bossman' | 'SWE' | 'Kailash' | 100000 |\n{END_TABLE}\n{names}\nage (int) | id (int) | name (str) |\n60 | 8 | 'Chip' |\n21 | 7 | 'Amanda' |\n25 | 6 | 'Shyam' |\n27 | 5 | 'Professor Weirich' |\nnil | 4 | 'Irene' |\n22 | 3 | 'Cassia' |\n23 | 2 | 'Zach' |\n21 | 1 | 'Kailash' |\n{END_TABLE}"

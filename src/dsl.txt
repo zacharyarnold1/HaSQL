@@ -1,5 +1,32 @@
 DSL Syntax
 
+IMPORTANT TERMINOLOGY (Terms that may appear in commands)
+
+- TABLE OBJECT
+    - A TABLE OBJECT is any sort of table of records. This could be:
+        - The name of a table
+        - A query that returns a table or records 
+        - The joining of two tables
+            - This could be a table joined with the joining of two other tables, and so on 
+
+- COLUMN LIST
+    - A COLUMN LIST is a list of column names seperated by a comma + space, i.e.: colA, colB, colC
+        - Columns names must exist in the table that records are being pulled from 
+        - COLUMN LIST could also be an asterisk, *, which signals that all columns in the table should be returned
+
+- CLAUSE
+    - A CLAUSE is a Conditional statements that, given a record, evaluates to true or false
+    - 
+
+All where clauses should be enclosed in brackets.
+    Where clauses can be logical conjuctions of other where clauses. The availble conjuctors are 'AND', 'OR', and 'NOT'
+
+    Example:
+    I want records only if age is greater than 20 and name is Kailash.... 
+    [IF] ({{age > 20} AND {name == 'Kailash'}})
+
+    I want records only if age is greater than 20 and there name is either Zach and Kailash.... 
+    [IF] ({{age > 20} AND {{name == 'Kailash'} OR {name == 'Zach'}}})
 Querying a table (GET statement):
     [GET] (list of columns/attributes that user wishes to return, required, seperated by commas)
     [IN] (name of table user wishes to retrieve data from, required)
@@ -91,8 +118,9 @@ Where clauses:
 
 [LET] (....) [BE] (temp table name) [GET] ...
 
-[GET] (*) [IN] ({(t1) [JOIN] {(t2) [JOIN] (t3) [ON] (condition)} [ON] (condition)})
+[GET] (*) [IN] ((t1) [JOIN] ((t2) [JOIN] (t3) [ON] (condition)) [ON] (condition))
 
+[LET] ([GE])
 
 INNERJOIN = MATCH 
 LEFTJOIN = MATCHLEFT
@@ -100,3 +128,11 @@ RIGHTJOIN = MATCHRIGHT
 FULLJOIN = MATCHFULL
 NATURALJOIN = MATCHREG
 ON = SUCHTHAT
+
+
+[GET] (*) [IN] ([GET] (name, age) [IN] (users)) [WHERE]
+
+[LET] (...) [BE] (name), (....) [BE] (name2), (....) [BE] (name3) [GET] ... [IN] ...
+
+
+[LET] ([GET] (*) [IN] (names) [IF] ({age >22})) [BE] (tempTable) [GET] (*) [IN] (tempTable) [IF] ({age > 0})
