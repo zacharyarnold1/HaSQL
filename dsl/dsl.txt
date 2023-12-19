@@ -1,0 +1,180 @@
+DSL Syntax
+
+IMPORTANT TERMINOLOGY (Terms that may appear in commands)
+
+- TABLE OBJECT
+    - A TABLE OBJECT is any sort of table of records. This could be:
+        - The name of a table
+        - A query that returns a table or records 
+        - The joining of two tables
+            - This could be a table joined with the joining of two other tables, and so on 
+
+- COLUMN LIST
+    - A COLUMN LIST is a list of column names seperated by a comma + space, i.e.: colA, colB, colC
+        - Columns names must exist in the table that records are being pulled from 
+        - COLUMN LIST could also be an asterisk, *, which signals that all columns in the table should be returned
+
+- CLAUSE
+    - A CLAUSE is a Conditional statements that, given a record, evaluates to true or false
+    - A CLAUSE can be composed of other CLAUSES's. The availble conjuctors are 'AND', 'OR', and 'NOT'
+        - Each CLAUSE should be wrapped in curly brackets
+    - Operators: <, >, <=, >=, ==, !=
+    - A CLAUSE can also condition on column values. 
+        - For example, if you only want record where the first_name column and last_name column are equal, you could say...
+         {first_name == last_name}
+    - Strings should be wrapped in singles quotes, column names and integer do not need to be wrapped
+    Example:
+    I want records only if age is greater than 20 and name is Kailash.... 
+    {{age > 20} AND {name == 'Kailash'}}
+    I want records only if age is greater than 20 and there name is either Zach and Kailash.... 
+    {{age > 20} AND {{name == 'Kailash'} OR {name == 'Zach'}}}
+    I want records only if the first_namne and last_name is Kailash and Natarajan, or the age is 20...
+    {{{first_name == 'Kailash'} AND {last_name == 'Natarajan'}} OR {age == 20}}
+
+- HEADER (schema)
+    - A HEADER is a list of column name, column type tuples
+    - Utilized in creating tables and adding columns to tables
+    - The availble column types are int and string 
+    - Each tuple in the list should be wrapped in curly brackets and seperated by comma + space
+    Example header:
+    {name, string}, {age, int}, {hometown, string}, {birth_year, int}
+
+- TABLE NAME
+    - The name of a table
+    - Characters limited to A through Z and '_'
+
+- COLUMN NAME 
+    - The name of a column
+    - Characters limited to A through Z and '_'
+
+- DECLARATION
+    - List of column name, value tuples
+    - Utlized in updating and inserting data into tables
+    - Value tuples can be of type string or int, but must match the type of the column they are being inserted into
+    - The column name specified the column to be updated, and the value specifies the value it should take on
+    - String values should be wrapped in single quotes
+    - Each tuple in the list should be wrapped in curly brackets
+    Example
+    {name, 'Kailash'}, {age, 20}, {hometown, 'Philadelphia'}, {birth_year, 2001}
+    will change name column to 'Kailash', age column to 20, hometown column to 'Philadelphia', and birth_year to 2001
+
+- COL CHANGE HEADER
+    - A COL CHANGE HEADER is a list of column name, column name tuples
+    - Utilized in updating column names
+        - first element is current column name, second element is updated/new column name
+    - Each tuple in the list should be wrapped in curly brackets and seperated by comma + space
+    Example header:
+    {name, name_updated}, {age, age_updated}, {hometown, hometown_updated}, {birth_year, birth_year_updated}
+
+- ON CONDITION 
+    - An ON CONDITION is a list of column name, column name tuples
+    - Utitlized in Joins
+        - first element is left table column name and second element is right table column name
+    - Each tuple in the list should be wrapped in curly brackets and seperated by comma + space
+    Example header:
+    {nameA, nameB}, {ageA, ageB}
+    This represents the following ON CONDITION:
+    nameA = nameB, ageA = ageB
+
+- JOIN TYPE 
+    - Availble join Types: 
+    MATCH (simulates SQL INNER JOIN)
+    MATCHLEFT (simulates SQL LEFT OUTER JOIN)
+    MATCHRIGHT (simulates SQL RIGHT OUTER JOIN)
+    MATCHFULL (simulates SQL FULL JOIN)
+    MATCHREG (simulates SQL NATURAL JOIN)
+    SUCHTHAT (simulates SQL JOIN ON condition)
+
+- DIRECTION
+    - DIRECTION can have two values: ascending or descending
+    - Used in sorting table in GET
+    - Determines order of sorting
+
+
+COMMANDS 
+
+- GET statement (query a table)
+    - [GET] (COLUMN LIST) [IN] (TABLE OBJECT) [IF] (CLAUSE) [SORT] (COLUMN LIST) (DIRECTION)
+        - Retrieves records from table specified in TABLE OBJECT if condition in CLAUSE is met, and returns only columns specified in COLUMN LIST. Results can be sorted by any number of columns in either direction
+    - [IF] (CLAUSE) is optional
+    - [SORT] (COLUMN LIST) (DIRECTION) is optional
+
+- PUT statement (insert data into a table)
+    - [PUT] (TABLE NAME) [WITH] (DECLARATION)
+    - Inserts values specified in DECLARATION into table specified by TABLE NAME
+    - All columns in delcaration must exist in the table
+        - Any columns that are not given a value will be set to NilVal
+
+- CHANGE statement (update data in a table)
+    - [CHANGE] (TABLE NAME) [TO] (DECLARATION) [IF] (CLAUSE)
+    - Updates records in table specified with values specified in DECLARATION only if CLAUSE is met
+    - [IF] (CLAUSE) is optional
+    - Any columns that are not given an update will remain the same
+
+- MAKE statement (create a table)
+    - [MAKE] (TABLE NAME) [WITH] (HEADER)
+    - Creates a table with the specified name
+    - The table will have the schema specified in the HEADER
+
+- REMOVEFROM statement (remove records from a table)
+    - [REMOVEFROM] (TABLE NAME) [IF] (CLAUSE)
+    - Removes all records from the specified table that match the CLAUSE
+
+- ADD COLS statement (add columns to a table)
+    - [ADD COLS] (HEADER) [TO] (TABLE NAME)
+    - Adds the column specified in the HEADER to the specified table
+
+- RENAME TABLE statement (rename a table)
+    - [RENAME TABLE] (TABLE NAME) [TO] (TABLE NAME)
+    - Renames table specified by first table name to the second table name
+
+- RENAME COL statement (rename a column in a table)
+    - [RENAME COL] (COLUMN NAME) [TO] (COLUMN NAME) [IN] (TABLE NAME)
+    - Renames first column to second column name in specified table
+
+- DELETE TABLE statement (Deleting a table)
+    - [DELETE TABLE] (TABLE NAME) 
+    - Deletes the specified table from the current database
+
+- VIEW statement (view of the database)
+    - [VIEW]
+    - Returns all of the table names and their schema in the current database
+
+
+LET BE EXPRESSIONS (CTE's)
+
+- A list of LET BE expressions can optioanlly proceed a GET statement
+- Syntax:
+    - [LET] (TABLE OBJECT) [BE] (TABLE NAME)
+- This creates a temporary table by the name TABLE NAME, that contains the records in the TABLE OBJECT
+- This temporary table can be used only in the GET statement that follows the list of LET BE expressions
+- The temporary tables do not exist after the query is executed
+- Seperate LET BE expressions with comma + space:
+    - [LET] (...) [BE] (...), [LET] (...) [BE] (...) [GET] (...) [IN] (...) [IF] (...)
+
+MATCH EXPRESSIONS (JOINS)
+
+- The results of a MATCH Expression is a TABLE OBJECT
+- MATCH TYPE 
+    - Availble MATCH Types: 
+    MATCH (simulates SQL INNER JOIN), must be followed by [SUCHTHAT] (ON CONDITION)
+    MATCHLEFT (simulates SQL LEFT OUTER JOIN), must be followed by [SUCHTHAT] (ON CONDITION)
+    MATCHRIGHT (simulates SQL RIGHT OUTER JOIN), must be followed by [SUCHTHAT] (ON CONDITION)
+    MATCHFULL (simulates SQL FULL JOIN), must be followed by [SUCHTHAT] (ON CONDITION)
+    MATCHREG (simulates SQL NATURAL JOIN)
+- Example:
+    - [GET] (nameA) [IN] ((namesA) [MATCH] (namesB) [SUCHTHAT] ({nameA, nameB}, {ageA, ageB}))
+    - [GET] (nameA) [IN] (((namesA) [MATCH] (namesB) [SUCHTHAT] ({nameA, nameB}, {ageA, ageB})) [MATCHREG] (namesC) [SUCHTHAT] ({nameA, nameC}, {ageA, ageC}))
+
+DATABASE MANAGEMENT OPERATIONS 
+
+- QUIT
+    - Quits HaSql
+- SAVE
+    - Saves current file to memory
+- LOAD db_name
+    - Loads database specified by name db_name, and assigns it as current database 
+- NEW db_name 
+    - Creates a new database called name db_name, and assigns it as current database 
+- SAVEAS db_name 
+    - Saves the current database to memory, creates a copy by name db_name, and sets the copy as the current database 
