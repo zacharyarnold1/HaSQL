@@ -8,6 +8,7 @@ import HaSqlDB
 import HaSqlFiles
 import HaSqlMainParser
 import HaSqlOpsComParser
+import HaSqlScriptValidator
 import HaSqlSyntax
 import System.IO (isEOF)
 
@@ -15,8 +16,8 @@ import System.IO (isEOF)
 main :: IO ()
 main = cliLoop (DBLoad Nothing Nothing)
 
--- validateScript :: String -> IO (Either String DatabaseState)
--- validateScript = validateScriptFromFile
+validateScript :: String -> IO (Either String String)
+validateScript = validateScriptFromFile
 
 -- The client loop, runs HaSqlDB
 cliLoop :: DBLoad -> IO ()
