@@ -5,6 +5,15 @@ import Data.Map qualified as Map
 import HaSqlSyntax
 import Test.QuickCheck
 
+newtype TableName = TableName String
+  deriving (Show, Eq)
+
+newtype SelectObj = SelectObj SQLObj
+  deriving (Show, Eq)
+
+instance Arbitrary SelectObj where
+  arbitrary = SelectObj <$> genSelect
+
 -- Generates arbitrary ValType
 instance Arbitrary ValType where
   arbitrary = elements [IntType, StringType]
@@ -16,7 +25,7 @@ instance Arbitrary Value where
       [ return NilVal,
         IntVal <$> arbitrary,
         StringVal <$> arbitraryStringValue,
-        ColVal <$> arbitraryColumnName
+        ColVal <$> genColName
       ]
 
 -- Generates arbitrary column name
@@ -51,6 +60,10 @@ instance Arbitrary Cols where
 genMatchingRecord :: Table -> Gen [(String, Value)]
 genMatchingRecord (Table cols _) = arbitraryKeyVal cols
 
+-- Generates a list of (column name, Value) pairs not matching the column schema of a table
+genNotMatchingRecord :: Table -> Gen [(String, Value)]
+genNotMatchingRecord (Table cols _) = arbitraryKeyValInv cols
+
 -- Helper function to generate a list of (column name, Value) pairs for given Cols
 arbitraryKeyVal :: Cols -> Gen [(String, Value)]
 arbitraryKeyVal cs = mapM createEntry (Map.toList $ fromCols cs)
@@ -58,6 +71,18 @@ arbitraryKeyVal cs = mapM createEntry (Map.toList $ fromCols cs)
     createEntry :: (String, ValType) -> Gen (String, Value)
     createEntry (name, vType) = do
       value <- arbitraryValue vType
+      return (name, value)
+
+-- Helper function to generate a list of (column name, Value) pairs for given Cols
+arbitraryKeyValInv :: Cols -> Gen [(String, Value)]
+arbitraryKeyValInv cs = mapM createEntry (Map.toList $ fromCols cs)
+  where
+    createEntry :: (String, ValType) -> Gen (String, Value)
+    createEntry (name, StringType) = do
+      value <- IntVal <$> arbitrary
+      return (name, value)
+    createEntry (name, IntType) = do
+      value <- StringVal <$> arbitraryStringValue
       return (name, value)
 
 -- Instance for generating arbitrary Records based on given columns
@@ -84,18 +109,21 @@ instance Arbitrary ClauseOp where
 
 -- Generates arbitrary clause
 instance Arbitrary Clause where
-  arbitrary = sized clauseGen
+  arbitrary =
+    oneof
+      [ sized clauseGen,
+        return NONE
+      ]
 
 -- Recursive generator for arbitrary Clause values
 clauseGen :: Int -> Gen Clause
-clauseGen 0 = return NONE -- Base case to stop recursion
+clauseGen 0 = liftM3 Clause arbitrary arbitrary arbitrary -- Base case to stop recursion
 clauseGen n =
   oneof
     [ liftM3 Clause arbitrary arbitrary arbitrary,
       liftM2 OR subClause subClause,
       liftM2 AND subClause subClause,
-      NOT <$> subClause,
-      return NONE
+      NOT <$> subClause
     ]
   where
     subClause = clauseGen (n `div` 2)
@@ -107,6 +135,22 @@ tableNameGen (DB db) =
     then return "defaultTable" -- Fallback for an empty database
     else elements (Map.keys db)
 
+-- Generator for arbitrary column names from a given Table
+columnNameGen :: Table -> Gen String
+columnNameGen (Table (Cols cols) recs) =
+  if Map.null cols
+    then return "defaultColumn" -- Fallback for an empty table
+    else elements (Map.keys cols)
+
+instance Arbitrary TableName where
+  arbitrary = TableName <$> genTableName
+
+genOrder :: Gen ([String], Bool)
+genOrder = do
+  keys <- listOf genColName
+  asc <- arbitrary
+  return (keys, asc)
+
 instance Arbitrary SQLObj where
   arbitrary = oneof [genSelect, genCreate, genInsert, genUpdate, genDelete, genDrop, genAdd, genRenameCol, genRenameTable]
 
@@ -115,7 +159,7 @@ genSelect = do
   cols <- arbitrary
   table <- arbitrary
   whereClause <- arbitrary
-  order <- arbitrary
+  order <- genOrder
   return $ SELECT cols table whereClause order
 
 genCreate :: Gen SQLObj
@@ -127,44 +171,44 @@ genCreate = do
 genInsert :: Gen SQLObj
 genInsert = do
   tableName <- arbitraryColumnName
-  record <- arbitrary
+  record <- genRecordPairs
   return $ INSERT tableName record
 
 genUpdate :: Gen SQLObj
 genUpdate = do
-  tableName <- arbitrary
-  record <- arbitrary
+  tableName <- genTableName
+  record <- genRecordPairs
   updateWhere <- arbitrary
   return $ UPDATE tableName record updateWhere
 
 genDelete :: Gen SQLObj
 genDelete = do
-  deleteFrom <- arbitrary
+  deleteFrom <- genTableName
   deleteWhere <- arbitrary
   return $ DELETE deleteFrom deleteWhere
 
 genDrop :: Gen SQLObj
 genDrop = do
-  tableName <- arbitrary
+  tableName <- genTableName
   return $ DROP tableName
 
 genAdd :: Gen SQLObj
 genAdd = do
-  tableName <- arbitrary
-  newCols <- arbitrary
+  tableName <- genTableName
+  newCols <- genHeaderPairs
   return $ ADD tableName newCols
 
 genRenameCol :: Gen SQLObj
 genRenameCol = do
-  tableName <- arbitrary
-  oldColName <- arbitrary
-  newColName <- arbitrary
+  tableName <- genTableName
+  oldColName <- genColName
+  newColName <- genColName
   return $ RENAMECOL tableName oldColName newColName
 
 genRenameTable :: Gen SQLObj
 genRenameTable = do
-  tableName <- arbitrary
-  newTableName <- arbitrary
+  tableName <- genTableName
+  newTableName <- genTableName
   return $ RENAMETABLE tableName newTableName
 
 -- Arbitrary instance for ColumnObj
@@ -172,7 +216,7 @@ instance Arbitrary ColumnObj where
   arbitrary =
     oneof
       [ return Star,
-        Columns <$> listOf genColName
+        Columns <$> listOf1 genColName
       ]
 
 -- Helper function to generate a column name
@@ -182,6 +226,9 @@ genColName = elements ["id", "name", "age", "userId", "address", "email"]
 -- Arbitrary instance for a list of (String, ValType)
 genHeaderPairs :: Gen [(String, ValType)]
 genHeaderPairs = listOf $ (,) <$> genColName <*> arbitrary
+
+genRecordPairs :: Gen [(String, Value)]
+genRecordPairs = listOf $ (,) <$> genColName <*> arbitrary
 
 -- Arbitrary instance for TableObj
 instance Arbitrary TableObj where
@@ -205,8 +252,8 @@ genTableObj i =
 
 -- Helper function to generate a table name
 genTableName :: Gen String
-genTableName = elements ["table1", "table2", "table3", "users", "orders"]
+genTableName = elements ["tableA", "tableB", "tableC", "users", "orders"]
 
 -- Helper function to generate a list of column name pairs
 genColNamePairs :: Gen [(String, String)]
-genColNamePairs = listOf $ (,) <$> genColName <*> genColName
+genColNamePairs = listOf1 $ (,) <$> genColName <*> genColName

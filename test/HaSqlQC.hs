@@ -1,82 +1,19 @@
 module HaSqlQC where
 
 import Control.Monad.State
+import Data.Bool (Bool (False))
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import HaSqlDB (create, delete, evalClause, insert, recordsFromTable, select, update)
+import HaSqlArbitrary
+import HaSqlClauseLogic
+import HaSqlDBOps
+import HaSqlDBRecordOps
+import HaSqlDBSelect
+import HaSqlMainParser
+import HaSqlPrettyPrint
 import HaSqlSyntax
 import Test.QuickCheck
-
--- HaSqlDB
--- Properties
--- select only returns records that satisfy the clause
-
--- logicalNegation :: ClauseOp -> ClauseOp
--- logicalNegation EQS = NEQ
--- logicalNegation GEQ = LTH
--- logicalNegation LEQ = GTH
--- logicalNegation LTH = GEQ
--- logicalNegation NEQ = EQS
--- logicalNegation GTH = LEQ
-
--- prop_selectOnlySatisfying :: Table -> ClauseOp -> Bool
--- prop_selectOnlySatisfying (Table (Cols m) rcs) co = all (selectOnlySatisfyingHelper (Table (Cols m) rcs) co) (Map.toList m)
-
--- selectOnlySatisfyingHelper :: Table -> ClauseOp -> (String, ValType) -> Bool
--- selectOnlySatisfyingHelper t co (s, IntType) =
---   let clause = Clause (ColVal s) (IntVal 0) co
---       resultTable = evalState (select Star "test" clause) (databaseFromTable t)
---       satisfiesClause = all (evalClause clause) (recordsFromTable (fromMaybe (Table (Cols Map.empty) []) resultTable))
---    in satisfiesClause
--- selectOnlySatisfyingHelper t co (s, StringType) =
---   let clause = Clause (ColVal s) (StringVal "mama") co
---       resultTable = evalState (select Star "test" clause) (databaseFromTable t)
---       satisfiesClause = all (evalClause clause) (recordsFromTable (fromMaybe (Table (Cols Map.empty) []) resultTable))
---    in satisfiesClause
-
--- prop_selectOnlySatisfyingB :: Table -> ClauseOp -> Bool
--- prop_selectOnlySatisfyingB (Table (Cols m) rcs) co = all (selectOnlySatisfyingHelper (Table (Cols m) rcs) co) (Map.toList m)
-
--- selectOnlySatisfyingHelperB :: Table -> ClauseOp -> (String, ValType) -> Bool
--- selectOnlySatisfyingHelperB t co (s, IntType) =
---   let clause = Clause (ColVal s) (IntVal 0) co
---       clauseNeg = Clause (ColVal s) (IntVal 0) (logicalNegation co)
---       resultTable = evalState (select Star "test" clause) (databaseFromTable t)
---       satisfiesClause = not $ any (evalClause clauseNeg) (recordsFromTable (fromMaybe (Table (Cols Map.empty) []) resultTable))
---    in satisfiesClause
--- selectOnlySatisfyingHelperB t co (s, StringType) =
---   let clause = Clause (ColVal s) (StringVal "mama") co
---       clauseNeg = Clause (ColVal s) (StringVal "mama") (logicalNegation co)
---       resultTable = evalState (select Star "test" clause) (databaseFromTable t)
---       satisfiesClause = not $ any (evalClause clauseNeg) (recordsFromTable (fromMaybe (Table (Cols Map.empty) []) resultTable))
---    in satisfiesClause
-
--- Helper function to create a Database from a single Table for testing
--- databaseFromTable :: Table -> Database
--- databaseFromTable table = DB $ Map.fromList [("test", table)]
-
--- Helper function to extract records from a Table
--- recordsFromTable :: Table -> [Record]
--- recordsFromTable (Table _ records) = records
-
--- select only returns specified columns (unless given star)
--- prop_selectOnlySpecifiedColumns :: Table -> ColumnObj -> Bool
--- prop_selectOnlySpecifiedColumns table colObj =
---   let resultTable = evalState (select colObj "test" NONE) (databaseFromTable table)
---       expectedColumns = case colObj of
---         Star -> allColumns table
---         Columns cols -> cols
---       containsOnlyExpectedColumns = all (`elem` expectedColumns) (columnsFromTable (fromMaybe (Table (Cols Map.empty) []) resultTable))
---    in containsOnlyExpectedColumns
-
--- Helper function to get all column names from a table
--- allColumns :: Table -> [String]
--- allColumns (Table (Cols cols) _) = Map.keys cols
-
--- Helper function to get column names from a table
--- columnsFromTable :: Table -> [String]
--- columnsFromTable (Table (Cols cols) _) = Map.keys cols
 
 prop_insertIncreasesSize :: Table -> Property
 prop_insertIncreasesSize table = forAll (genMatchingRecord table) $ \record ->
@@ -117,14 +54,6 @@ prop_createTableIncreasesDbSize db tableName columns =
             newSize = Map.size db'
          in newSize === oldSize + 1
 
-prop_multipleInsertions :: Database -> String -> [[(String, Value)]] -> Property
-prop_multipleInsertions db tableName records =
-  Map.member tableName (fromDatabase db)
-    ==> let oldSize = length . recordsFromTable $ fromJust (Map.lookup tableName (fromDatabase db))
-            db' = foldl (\db rec -> execState (insert tableName rec) db) db records
-            newSize = length . recordsFromTable $ fromJust (Map.lookup tableName (fromDatabase db'))
-         in newSize === oldSize + length records
-
 prop_deletedRecordsAbsent :: Database -> Clause -> Property
 prop_deletedRecordsAbsent db clause = not (Map.null (fromDatabase db))
   ==> forAll (tableNameGen db)
@@ -140,7 +69,7 @@ prop_selectAllColumns db = not (Map.null (fromDatabase db))
   ==> forAll (tableNameGen db)
   $ \tableName ->
     let tableObj = TName tableName
-        (result, _) = runState (select Star tableObj Map.empty NONE [] (["id"], False)) db
+        (result, _) = runState (select Star tableObj Map.empty NONE (["id"], False)) db
         originalRecords = recordsFromTable (fromJust $ Map.lookup tableName (fromDatabase db))
      in fmap recordsFromTable result === Just originalRecords
 
@@ -186,6 +115,142 @@ prop_deleteEntireTableEmpty db = not (Map.null (fromDatabase db))
     let (_, DB db') = runState (delete tableName NONE) db
         newTable = fromJust $ Map.lookup tableName db'
      in null (recordsFromTable newTable)
+
+prop_dropTableReducesDbSize :: Database -> Property
+prop_dropTableReducesDbSize db =
+  forAll (tableNameGen db) $ \tableName ->
+    let oldSize = Map.size (fromDatabase db)
+        (_, DB db') = runState (HaSqlDBOps.drop tableName) db
+        newSize = Map.size db'
+     in newSize === oldSize - 1
+
+prop_addColumnIncreasesSchemaSize :: Database -> String -> ValType -> Property
+prop_addColumnIncreasesSchemaSize db tableName newColType =
+  forAll (tableNameGen db) $ \tableName ->
+    let oldSchemaSize = Map.size . fromCols . colsFromTable $ fromJust (Map.lookup tableName (fromDatabase db))
+        newColName = "newCol"
+        (_, DB db') = runState (add [(newColName, newColType)] tableName) db
+        newSchemaSize = Map.size . fromCols . colsFromTable $ fromJust (Map.lookup tableName db')
+     in newSchemaSize === oldSchemaSize + 1
+
+prop_renameTableUpdatesName :: Database -> Property
+prop_renameTableUpdatesName db =
+  forAll (tableNameGen db) $ \oldName ->
+    let newName = oldName ++ "_new"
+        (_, DB db') = runState (renameTable oldName newName) db
+     in Map.member newName db' && not (Map.member oldName db')
+
+prop_updateInvalidRecordFails :: Database -> Table -> Property
+prop_updateInvalidRecordFails db table =
+  forAll (genMatchingRecord table) $ \record ->
+    let invalidRecord = ("invalidCol", NilVal) : record
+        tableName = "someTable"
+        (result, _) = runState (update tableName invalidRecord NONE) db
+     in isNothing result
+
+prop_createDuplicateTableFails :: Database -> String -> [(String, ValType)] -> Bool
+prop_createDuplicateTableFails db tableName columns =
+  let (_, DB db') = runState (create tableName columns) db
+      (result, _) = runState (create tableName columns) (DB db')
+   in isNothing result
+
+prop_deleteAllMakesTableEmpty :: Database -> Property
+prop_deleteAllMakesTableEmpty db =
+  forAll (tableNameGen db) $ \tableName ->
+    let (_, DB db') = runState (delete tableName NONE) db
+        table = fromJust $ Map.lookup tableName db'
+     in null (recordsFromTable table)
+
+prop_addColumnPreservesRecordCount :: Database -> String -> [(String, ValType)] -> Property
+prop_addColumnPreservesRecordCount db tableName newCols =
+  forAll (tableNameGen db) $
+    \tableName ->
+      let Just table = Map.lookup tableName (fromDatabase db)
+          oldRecordCount = length (recordsFromTable table)
+          (_, DB db') = runState (add newCols tableName) db
+          newRecordCount = length . recordsFromTable $ fromJust (Map.lookup tableName db')
+       in newRecordCount === oldRecordCount
+
+prop_renameColumnUpdatesSchema :: Database -> String -> Property
+prop_renameColumnUpdatesSchema db newColName =
+  forAll (tableNameGen db) $
+    \tableName ->
+      forAll (columnNameGen $ fromJust $ Map.lookup tableName (fromDatabase db)) $
+        \oldColName ->
+          let (_, DB db') = runState (renameCol newColName oldColName tableName) db
+              newTable = fromJust $ Map.lookup tableName db'
+           in isJust (Map.lookup newColName (fromCols $ colsFromTable newTable)) && isNothing (Map.lookup oldColName (fromCols $ colsFromTable newTable))
+
+prop_insertInvalidTypeFails :: Database -> Property
+prop_insertInvalidTypeFails db =
+  forAll (tableNameGen db) $
+    \tableName ->
+      forAll (genNotMatchingRecord $ fromJust $ Map.lookup tableName (fromDatabase db)) $
+        \record ->
+          let (result, _) = runState (insert tableName record) db
+           in isNothing result
+  where
+    matchesType :: Value -> ValType -> Bool
+    matchesType (IntVal _) IntType = True
+    matchesType (StringVal _) StringType = True
+    matchesType NilVal _ = True
+    matchesType _ _ = False
+
+prop_addColPreservesExistingData :: Database -> String -> [(String, ValType)] -> Property
+prop_addColPreservesExistingData db tableName newCols =
+  forAll (tableNameGen db) $
+    \tableName ->
+      let Just oldTable = Map.lookup tableName (fromDatabase db)
+          oldRecords = recordsFromTable oldTable
+          (_, DB db') = runState (add newCols tableName) db
+          newRecords = recordsFromTable (fromJust $ Map.lookup tableName db')
+       in all (\(oldRec, newRec) -> all (\col -> Map.lookup col (fromRecord oldRec) == Map.lookup col (fromRecord newRec)) (Map.keys $ fromRecord oldRec)) (zip oldRecords newRecords)
+
+prop_renameTablePreservesRecords :: Database -> String -> Property
+prop_renameTablePreservesRecords db newName =
+  not (Map.member newName (fromDatabase db))
+    ==> forAll (tableNameGen db)
+    $ \oldName ->
+      let Just oldTable = Map.lookup oldName (fromDatabase db)
+          oldRecords = recordsFromTable oldTable
+          (_, DB db') = runState (renameTable oldName newName) db
+          newRecords = recordsFromTable (fromJust $ Map.lookup newName db')
+       in newRecords === oldRecords
+
+prop_SQLObjRoundTrip :: (SQLObj, [(TableName, SelectObj)]) -> Bool
+prop_SQLObjRoundTrip (sqlobj, l) =
+  let input = (sqlobj, map (\(TableName t, SelectObj so) -> (t, so)) l)
+      printed = prettyPrintSQLObjWithCTEs input
+      parsed = mainParse printed
+   in case parsed of
+        Left err -> False
+        Right output -> input == output
+
+runAllTests :: IO ()
+runAllTests = do
+  quickCheck prop_insertIncreasesSize
+  quickCheck prop_createTableSuccess
+  quickCheck prop_insertIntoNonExistingTable
+  quickCheck prop_deleteFromNonExistingTable
+  quickCheck prop_updateNonExistingTable
+  quickCheck prop_createTableIncreasesDbSize
+  quickCheck prop_deletedRecordsAbsent
+  quickCheck prop_selectAllColumns
+  quickCheck prop_insertionIntegrity
+  quickCheck prop_insertionIncreasesCount
+  quickCheck prop_updateAllRecords
+  quickCheck prop_deleteEntireTableEmpty
+  quickCheck prop_dropTableReducesDbSize
+  quickCheck prop_addColumnIncreasesSchemaSize
+  quickCheck prop_renameTableUpdatesName
+  quickCheck prop_updateInvalidRecordFails
+  quickCheck prop_createDuplicateTableFails
+  quickCheck prop_deleteAllMakesTableEmpty
+  quickCheck prop_addColumnPreservesRecordCount
+  quickCheck prop_renameColumnUpdatesSchema
+  quickCheck prop_insertInvalidTypeFails
+  quickCheck prop_addColPreservesExistingData
+  quickCheck prop_renameTablePreservesRecords
 
 -- select should return nothing for tables that dont exist
 -- create should create new table in database of specified name

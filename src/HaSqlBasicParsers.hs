@@ -43,9 +43,16 @@ valueParserNoCol =
 
 -- parses Integers
 intParser :: Parser Int
-intParser = do
+intParser =
+  try negIntParser <|> do
+    digits <- many1 digit
+    return (read digits)
+
+negIntParser :: Parser Int
+negIntParser = do
+  char '-'
   digits <- many1 digit
-  return (read digits)
+  return $ -1 * (read digits :: Int)
 
 -- parses string literals
 stringLiteralParser :: Parser String

@@ -1,7 +1,7 @@
 module HaSqlDBOps where
 
 import Control.Monad.State
-import Data.List (sortBy)
+import Data.List (intercalate, sortBy)
 import Data.Map (Map)
 import Data.Map qualified
 import Data.Maybe
@@ -87,7 +87,6 @@ view = state $ \(DB db) ->
         ++ name
         ++ "}\n"
         ++ "Schema:\n"
-        ++ concatMap showCol (Data.Map.toList cols)
-        ++ "\n"
+        ++ intercalate "\n" (map showCol (Data.Map.toList cols))
     showCol :: (String, ValType) -> String
-    showCol (colName, colType) = colName ++ " - " ++ valTypeToString colType ++ "\n"
+    showCol (colName, colType) = colName ++ " - " ++ valTypeToString colType

@@ -75,7 +75,3 @@ runScript db filePath = do
   db2 <- foldM executeLine db linesOfContent
   putStrLn "Script executed"
   return db2
-
--- For a inputted script, returns if that script is valid or not
-validateScript :: FilePath -> Bool
-validateScript = undefined

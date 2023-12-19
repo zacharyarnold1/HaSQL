@@ -3,6 +3,21 @@ module HaSqlPrettyPrint where
 import Data.List
 import HaSqlSyntax
 
+prettyPrintSQLObjWithCTEs :: (SQLObj, [(String, SQLObj)]) -> String
+prettyPrintSQLObjWithCTEs (sqlobj, []) = prettyPrintSQLObj sqlobj
+prettyPrintSQLObjWithCTEs (sqlobj, l) =
+  intercalate ",\n" (map prettyPrintCTE l)
+    ++ "\n"
+    ++ prettyPrintSQLObj sqlobj
+
+prettyPrintCTE :: (String, SQLObj) -> String
+prettyPrintCTE (s, sqlobj) =
+  "[LET] ("
+    ++ prettyPrintSQLObj sqlobj
+    ++ ") [BE] ("
+    ++ s
+    ++ ")"
+
 prettyPrintSQLObj :: SQLObj -> String
 prettyPrintSQLObj obj =
   case obj of
@@ -17,17 +32,14 @@ prettyPrintSQLObj obj =
     DROP tableName -> prettyPrintDropTable tableName
     VIEW -> "[VIEW]"
 
--- Add cases for other SQLObj types if needed
-
 prettyPrintSelect :: ColumnObj -> TableObj -> Clause -> ([String], Bool) -> String
 prettyPrintSelect cols table whereCls order =
   "[GET] "
     ++ prettyPrintColumnObj cols
     ++ " [IN] ("
     ++ prettyPrintTableObj table
-    ++ ") "
+    ++ ")"
     ++ prettyPrintClause whereCls
-    ++ " "
     ++ prettyPrintOrder order
 
 prettyPrintCreate :: String -> [(String, ValType)] -> String
@@ -49,7 +61,7 @@ prettyPrintUpdate tableName record whereCls =
 
 prettyPrintDelete :: String -> Clause -> String
 prettyPrintDelete tableName whereCls =
-  "[REMOVEFROM] (" ++ tableName ++ ") " ++ prettyPrintClause whereCls
+  "[REMOVEFROM] (" ++ tableName ++ ") (" ++ prettyPrintClause whereCls ++ ")"
 
 prettyPrintAdd :: String -> [(String, ValType)] -> String
 prettyPrintAdd tableName newCols =
@@ -75,15 +87,15 @@ prettyPrintTableObj :: TableObj -> String
 prettyPrintTableObj (TName name) = name
 prettyPrintTableObj (CTE cte) = prettyPrintSQLObj cte
 prettyPrintTableObj (INNERJOIN table1 table2 conds) =
-  prettyPrintJoin "INNER JOIN" table1 table2 conds
+  prettyPrintJoin "[MATCH]" table1 table2 conds
 prettyPrintTableObj (LEFTJOIN table1 table2 conds) =
-  prettyPrintJoin "LEFT JOIN" table1 table2 conds
+  prettyPrintJoin "[MATCHLEFT]" table1 table2 conds
 prettyPrintTableObj (RIGHTJOIN table1 table2 conds) =
-  prettyPrintJoin "RIGHT JOIN" table1 table2 conds
+  prettyPrintJoin "[MATCHRIGHT]" table1 table2 conds
 prettyPrintTableObj (FULLJOIN table1 table2 conds) =
-  prettyPrintJoin "FULL JOIN" table1 table2 conds
+  prettyPrintJoin "[MATCHFULL]" table1 table2 conds
 prettyPrintTableObj (NATURALJOIN table1 table2) =
-  prettyPrintJoin "NATURAL JOIN" table1 table2 []
+  prettyPrintJoin "[MATCHREG]" table1 table2 []
 
 prettyPrintJoin :: String -> TableObj -> TableObj -> [(String, String)] -> String
 prettyPrintJoin joinType table1 table2 conds =
@@ -92,20 +104,50 @@ prettyPrintJoin joinType table1 table2 conds =
 prettyPrintJoinConditions :: [(String, String)] -> String
 prettyPrintJoinConditions [] = ""
 prettyPrintJoinConditions conds =
-  " ON " ++ intercalate " AND " (map (\(col1, col2) -> col1 ++ " = " ++ col2) conds)
+  " [SUCHTHAT] " ++ " (" ++ intercalate ", " (map (\(col1, col2) -> "{" ++ col1 ++ ", " ++ col2 ++ "}") conds) ++ ")"
 
 prettyPrintClause :: Clause -> String
 prettyPrintClause NONE = ""
-prettyPrintClause clause = "[IF] " ++ show clause
+prettyPrintClause clause = " [IF] " ++ "(" ++ prettyPrintClauseHelper clause ++ ")"
+
+prettyPrintClauseHelper :: Clause -> String
+prettyPrintClauseHelper NONE = ""
+prettyPrintClauseHelper (AND c1 c2) =
+  "{ " ++ prettyPrintClauseHelper c1 ++ " AND " ++ prettyPrintClauseHelper c2 ++ "}"
+prettyPrintClauseHelper (OR c1 c2) =
+  "{ " ++ prettyPrintClauseHelper c1 ++ " OR " ++ prettyPrintClauseHelper c2 ++ "}"
+prettyPrintClauseHelper (NOT c) = "{NOT " ++ prettyPrintClauseHelper c ++ "}"
+prettyPrintClauseHelper (Clause v1 v2 op) = "{" ++ prettyPrintValue v1 ++ prettyPrintClauseOp op ++ prettyPrintValue v2 ++ "}"
+
+prettyPrintValue :: Value -> String
+prettyPrintValue (IntVal i) = show i
+prettyPrintValue NilVal = "nil"
+prettyPrintValue (StringVal s) = "'" ++ s ++ "'"
+prettyPrintValue (ColVal c) = c
+
+prettyPrintClauseOp :: ClauseOp -> String
+prettyPrintClauseOp EQS = " == "
+prettyPrintClauseOp GEQ = " >= "
+prettyPrintClauseOp GTH = " > "
+prettyPrintClauseOp LTH = " < "
+prettyPrintClauseOp LEQ = " <= "
+prettyPrintClauseOp NEQ = " != "
 
 prettyPrintOrder :: ([String], Bool) -> String
-prettyPrintOrder (cols, dir) =
-  "[ORDER] " ++ intercalate ", " cols ++ " (" ++ show dir ++ ")"
+prettyPrintOrder ([], dir) = ""
+prettyPrintOrder (cols, True) =
+  " [ORDER] (" ++ intercalate ", " cols ++ ") (" ++ "ascending" ++ ")"
+prettyPrintOrder (cols, False) =
+  " [ORDER] (" ++ intercalate ", " cols ++ ") (" ++ "descending" ++ ")"
 
 prettyPrintHeader :: [(String, ValType)] -> String
 prettyPrintHeader header =
-  "(" ++ intercalate ", " (map (\(name, vtype) -> "{" ++ name ++ ", " ++ show vtype ++ "}") header) ++ ")"
+  "(" ++ intercalate ", " (map (\(name, vtype) -> "{" ++ name ++ ", " ++ prettyPrintValType vtype ++ "}") header) ++ ")"
+
+prettyPrintValType :: ValType -> String
+prettyPrintValType StringType = "string"
+prettyPrintValType IntType = "int"
 
 prettyPrintRecord :: [(String, Value)] -> String
 prettyPrintRecord record =
-  "(" ++ intercalate ", " (map (\(name, value) -> "{" ++ name ++ ", " ++ show value ++ "}") record) ++ ")"
+  "(" ++ intercalate ", " (map (\(name, value) -> "{" ++ name ++ ", " ++ prettyPrintValue value ++ "}") record) ++ ")"

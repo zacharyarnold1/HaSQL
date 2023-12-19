@@ -34,6 +34,7 @@ parseSelect = do
   ordering <- option ([], False) parseOrdering
   return SELECT {selectColumns = cols, fromTable = table, whereClauses = whereClause, order = ordering}
 
+-- parses joins
 parseJoin :: Parser TableObj
 parseJoin = try parseInnerJoin <|> try parseLeftJoin <|> try parseRightJoin <|> try parseFullJoin <|> parseNaturalJoin
 

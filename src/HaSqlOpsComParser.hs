@@ -53,6 +53,7 @@ parseScript = do
   name <- many1 (noneOf "0123456789 (){}[],\n'")
   return (SCRIPT name)
 
+-- parse DELETEDB command
 parseDeleteDB :: Parser Command
 parseDeleteDB = do
   string "DELETEDB"

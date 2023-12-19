@@ -23,6 +23,7 @@ parseOrdering = do
         _ -> error "Invalid ordering direction"
   return (cols, bool)
 
+-- parse VIEW statement
 parseView :: Parser SQLObj
 parseView = do
   reservedOp "[VIEW]"
