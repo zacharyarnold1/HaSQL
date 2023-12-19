@@ -40,11 +40,24 @@ library
   import:
       common-stanza
   exposed-modules:
-      HaSqlCLI
-      , HaSqlDB
-      , HaSqlFiles
-      , HaSqlParser
-      , HaSqlSyntax
+      HaSqlBasicParsers,
+      HaSqlClauseLogic,
+      HaSqlClauseParser,
+      HaSqlCLI,
+      HaSqlDataParsers,
+      HaSqlDB,
+      HaSqlDBOps,
+      HaSqlDBOpsParser,
+      HaSqlDBRecordOps,
+      HaSqlDBSelect,
+      HaSqlToString,
+      HaSqlTables,
+      HaSqlTableParser,
+      HaSqlSyntax,
+      HaSqlOpsComParser,
+      HaSqlMainParser,
+      HaSqlLoadParser,
+      HaSqlFiles
   hs-source-dirs:
       src
 
@@ -66,9 +79,9 @@ test-suite project-cis5520-test
   type: 
       exitcode-stdio-1.0
   main-is: 
-      Spec.hs
+      Main.hs
   hs-source-dirs:
-      test
+      ParserTest
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       project-cis5520

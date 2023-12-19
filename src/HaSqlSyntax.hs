@@ -120,7 +120,7 @@ type Name = String
 
 -- Database, mapping table names to tables.
 newtype Database = DB (Map Name Table)
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- Table in a database (columns and records).
 data Table = Table Cols [Record]

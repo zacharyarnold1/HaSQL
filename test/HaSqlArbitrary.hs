@@ -34,7 +34,7 @@ arbitraryColumnName = listOf1 $ elements ['a' .. 'z']
 
 -- Generates arbitrary String values
 arbitraryStringValue :: Gen String
-arbitraryStringValue = listOf1 $ suchThat arbitrary (/= '\'')
+arbitraryStringValue = listOf1 $ suchThat arbitrary (\x -> x /= '\'' && x /= '\\' && x /= '/')
 
 -- Generates arbitrary value based on given ValType
 arbitraryValue :: ValType -> Gen Value

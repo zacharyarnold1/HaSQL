@@ -1,0 +1,6 @@
+{dzo}
+c (int) | uxb (int) | y (str) |
+{END_TABLE}
+{yjl}
+mdo (str) |
+'6

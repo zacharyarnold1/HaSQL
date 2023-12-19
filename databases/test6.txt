@@ -1,0 +1,5 @@
+Database Name: test6
+{names}
+age (int) | id (int) | name (str) |
+21 | 1 | 'Kailash' |
+{END_TABLE}

@@ -1,6 +1,6 @@
 module Main where
 
-import ParserTest
+import HaSqlQC
 
 main :: IO ()
-main = ParserTest.main
+main = runAllTests

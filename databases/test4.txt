@@ -1,0 +1,9 @@
+{employeesA}
+boss (str) | division (str) | name (str) | salary (int) |
+nil | nil | 'Professor Weirich' | 5000000000 |
+nil | 'Finance' | 'Eli' | 100000 |
+'Bosswoman' | 'Biology' | 'Amanda' | 130000 |
+'Bosswoman' | 'HWE' | 'Shyam' | 150000 |
+'Bossman' | 'Swagonometry' | 'Zach' | nil |
+'Bossman' | 'SWE' | 'Kailash' | 100000 |
+{END_TABLE}
