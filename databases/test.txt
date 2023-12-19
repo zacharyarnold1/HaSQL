@@ -1,0 +1,7 @@
+Database Name: test
+{names}
+age (int) | budget (int) | email (str) | id (int) | name (str) |
+22 | nil | nil | 3 | 'Cassia' |
+23 | nil | nil | 2 | 'Zach' |
+21 | nil | nil | 1 | 'Kailash' |
+{END_TABLE}

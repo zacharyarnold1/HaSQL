@@ -30,7 +30,7 @@ parseRecordNoCol = do
 -- parses table name
 parseTableName :: Parser TableObj
 parseTableName = do
-  name <- many1 (noneOf "0123456789 (){}[],\n'") -- Adjust according to your naming conventions
+  name <- many1 (noneOf "0123456789 (){}[],\n'")
   return $ TName name
 
 -- parses header (i.e. schema) of a table, string (column name), valType (column type) tuples

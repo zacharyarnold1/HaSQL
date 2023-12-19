@@ -100,7 +100,7 @@ valTypeParser =
 keyTypeParser :: Parser (String, ValType)
 keyTypeParser = do
   char '{'
-  key <- many1 letter
+  key <- many1 (noneOf "0123456789 (){}[],\n'")
   char ','
   spaces
   value <- valTypeParser

@@ -8,12 +8,16 @@ import HaSqlDB
 import HaSqlFiles
 import HaSqlMainParser
 import HaSqlOpsComParser
+import HaSqlScriptValidator
 import HaSqlSyntax
 import System.IO (isEOF)
 
 -- Main function for the CLI
 main :: IO ()
 main = cliLoop (DBLoad Nothing Nothing)
+
+validateScript :: String -> IO (Either String DatabaseState)
+validateScript = validateScriptFromFile
 
 -- The client loop, runs HaSqlDB
 cliLoop :: DBLoad -> IO ()
@@ -31,7 +35,7 @@ cliLoop (DBLoad (Just db) (Just s)) = do
     Right (LOAD s2) -> do
       ld <- loadDatabase s2
       cliLoop ld
-    Right (DELETEDB s2) -> deleteDatabase s2 >> cliLoop (DBLoad (Just db) (Just s))
+    Right (DELETEDB s2) -> deleteDatabase s2 >> cliLoop (DBLoad Nothing Nothing)
     Left _ ->
       case mainParse str of
         Left err -> print err >> cliLoop (DBLoad (Just db) (Just s))
@@ -45,7 +49,7 @@ cliLoop mtl = do
   str <- getLine
   case parseOperationalCommand str of
     Right QUIT -> return ()
-    Right (NEW s) -> cliLoop (DBLoad (Just $ DB Map.empty) (Just s))
+    Right (NEW s) -> newDB s >> cliLoop (DBLoad (Just $ DB Map.empty) (Just s))
     Right (LOAD s) -> do
       ld <- loadDatabase s
       cliLoop ld

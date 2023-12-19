@@ -11,8 +11,9 @@ import System.IO.Error (isDoesNotExistError)
 saveDatabase :: DBLoad -> IO ()
 saveDatabase (DBLoad (Just db) (Just dbName)) = do
   let dbString = databaseToString db
+  let content = "Database Name: " ++ dbName ++ "\n" ++ dbString
   let fileName = "databases/" ++ dbName ++ ".txt"
-  writeFile fileName dbString
+  writeFile fileName content
 saveDatabase _ = putStrLn "Error: No database or database name provided"
 
 -- deletes a database of specified name
@@ -45,3 +46,10 @@ loadDatabase dbName = do
           return $ DBLoad Nothing Nothing
         Right db ->
           return $ DBLoad (Just db) (Just dbName)
+
+-- creates a new DB, i.e. creates its memory file
+newDB :: String -> IO ()
+newDB s = do
+  let fileName = "databases/" ++ s ++ ".txt"
+  let content = "Database name: " ++ s
+  writeFile fileName content
