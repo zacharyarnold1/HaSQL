@@ -44,14 +44,5 @@ testLeftJoin = TestCase $ do
           ]
   assertEqual "LEFT JOIN should include all rows from the left table" expected result
 
--- Test List
-tests :: Test
-tests =
-  TestList
-    [ TestLabel "Test Inner Join" testInnerJoin,
-      TestLabel "Test Left Join" testLeftJoin
-    ]
-
 runJoinTests :: IO Counts
-
-runJointests = runTestTT tests
+runJoinTests = runTestTT $ TestList [testInnerJoin, testLeftJoin]
