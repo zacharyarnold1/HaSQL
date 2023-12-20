@@ -3,6 +3,8 @@ import Data.Map qualified as Map
 import HaSqlDB
 import HaSqlSyntax
 import Test.HUnit
+import HaSqlDBOps
+import HaSqlDBRecordOps
 
 createTestDatabase :: Database
 createTestDatabase = Map.empty
@@ -150,5 +152,5 @@ testDatabaseOperationsJ = TestCase $ do
   let expected = "age (int) | id (int) | name (str) |\n25 | 2 | 'Updated Name' |\n30 | 1 | 'Alice' |\n"
   assertEqual "Test database operations J" expected result
 
-main :: IO Counts
-main = runTestTT $ TestList [testDatabaseOperationsA, testDatabaseOperationsB, testDatabaseOperationsC, testDatabaseOperationsD, testDatabaseOperationsE, testDatabaseOperationsF, testDatabaseOperationsG, testDatabaseOperationsH, testDatabaseOperationsI, testDatabaseOperationsJ]
+runDBTests :: IO Counts
+runDBTests = runTestTT $ TestList [testDatabaseOperationsA, testDatabaseOperationsB, testDatabaseOperationsC, testDatabaseOperationsD, testDatabaseOperationsE, testDatabaseOperationsF, testDatabaseOperationsG, testDatabaseOperationsH, testDatabaseOperationsI, testDatabaseOperationsJ]

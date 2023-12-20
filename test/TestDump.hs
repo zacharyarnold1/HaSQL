@@ -18,11 +18,11 @@ import Test.QuickCheck
 
 prop_saveLoadRoundTrip :: Database -> Property
 prop_saveLoadRoundTrip db = ioProperty $ do
-  let dbName = "testDB" -- A temporary database name for testing
+  let dbName = "testDB"
       dbLoad = DBLoad (Just db) (Just dbName)
-  saveDatabase dbLoad -- Save the database
-  dbLoadResult <- loadDatabase dbName -- Load the saved database
-  deleteDatabase dbName -- Clean up the test database file
+  saveDatabase dbLoad
+  dbLoadResult <- loadDatabase dbName 
+  deleteDatabase dbName 
   return $ case dbLoadResult of
     DBLoad (Just loadedDb) _ -> db == loadedDb
     _ -> False
@@ -39,9 +39,9 @@ prop_deleteThenLoadDatabase :: Database -> Property
 prop_deleteThenLoadDatabase db = ioProperty $ do
   let dbName = "testDBForDelete"
       dbLoad = DBLoad (Just db) (Just dbName)
-  saveDatabase dbLoad -- Save the database
-  deleteDatabase dbName -- Delete the database
-  dbLoadResult <- loadDatabase dbName -- Attempt to load the deleted database
+  saveDatabase dbLoad
+  deleteDatabase dbName 
+  dbLoadResult <- loadDatabase dbName 
   return $ case dbLoadResult of
     DBLoad Nothing _ -> True
     _ -> False
@@ -51,9 +51,9 @@ prop_saveLoadEmptyDatabase = ioProperty $ do
   let emptyDb = DB Map.empty
       dbName = "emptyTestDB"
       dbLoad = DBLoad (Just emptyDb) (Just dbName)
-  saveDatabase dbLoad -- Save the empty database
-  dbLoadResult <- loadDatabase dbName -- Load the saved database
-  deleteDatabase dbName -- Clean up the test database file
+  saveDatabase dbLoad
+  dbLoadResult <- loadDatabase dbName 
+  deleteDatabase dbName 
   return $ case dbLoadResult of
     DBLoad (Just loadedDb) _ -> emptyDb == loadedDb
     _ -> False

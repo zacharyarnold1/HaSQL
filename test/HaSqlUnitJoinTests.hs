@@ -1,6 +1,5 @@
 module HaSqlUnitTests where
 
--- Assume this module contains your join logic
 import Data.Map (fromList)
 import HaSqlSyntax
 import HaSqlTables
@@ -53,6 +52,6 @@ tests =
       TestLabel "Test Left Join" testLeftJoin
     ]
 
--- Run tests
-main :: IO Counts
-main = runTestTT tests
+runJoinTests :: IO Counts
+
+runJointests = runTestTT tests
