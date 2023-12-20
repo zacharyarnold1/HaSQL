@@ -10,7 +10,7 @@ import HaSqlMainParser
 import HaSqlOpsComParser
 import HaSqlScriptValidator
 import HaSqlSyntax
-import System.IO (isEOF)
+import System.IO (hFlush, isEOF, stdout)
 
 -- Main function for the CLI
 main :: IO ()
@@ -23,6 +23,7 @@ validateScript = validateScriptFromFile
 cliLoop :: DBLoad -> IO ()
 cliLoop (DBLoad (Just db) (Just s)) = do
   putStr (s ++ "> ")
+  hFlush stdout
   str <- getLine
   case parseOperationalCommand str of
     Right (SCRIPT s2) -> do
@@ -46,6 +47,7 @@ cliLoop (DBLoad (Just db) (Just s)) = do
                 cliLoop (DBLoad (Just a) (Just s))
 cliLoop mtl = do
   putStr "HaSQL> "
+  hFlush stdout
   str <- getLine
   case parseOperationalCommand str of
     Right QUIT -> return ()

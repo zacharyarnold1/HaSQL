@@ -57,7 +57,8 @@ library
       HaSqlOpsComParser,
       HaSqlMainParser,
       HaSqlLoadParser,
-      HaSqlFiles
+      HaSqlFiles,
+      HaSqlScriptValidator
   hs-source-dirs:
       src
 
@@ -81,7 +82,7 @@ test-suite project-cis5520-test
   main-is: 
       Main.hs
   hs-source-dirs:
-      ParserTest
+      test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       project-cis5520

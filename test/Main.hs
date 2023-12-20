@@ -6,4 +6,9 @@ import HaSqlUnitJoinTests
 import ParserTest
 
 main :: IO ()
-main = runAllTests
+main = do
+  runAllTests
+  runParserTests
+  runJoinTests
+  runDBTests
+  return ()

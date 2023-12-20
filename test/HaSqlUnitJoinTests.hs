@@ -1,4 +1,4 @@
-module HaSqlUnitTests where
+module HaSqlUnitJoinTests where
 
 import Data.Map (fromList)
 import HaSqlSyntax

@@ -1,3 +1,5 @@
+module DBTest where
+
 import Control.Monad.State as S
 import Data.Map qualified as Map
 import HaSqlDB
